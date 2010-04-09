@@ -1,0 +1,308 @@
+Contour binning and accumulative smoothing software
+Version 1.2
+------------------------------------------------------------------------------
+
+Copyright Jeremy Sanders <jss@ast.cam.ac.uk> (2006)
+The reference paper is Sanders (2006), MNRAS, submitted
+ This software is licensed under the GNU Public License
+ See the file included as LICENSE for details
+http://www-xray.ast.cam.ac.uk/~jss/contbin/
+
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+How to build the software
+-------------------------
+
+This software has been tested with gcc-3.4.4 under Scientific Linux
+4. It should build under most Unix/Linux systems with GNU gcc (g++),
+with a bit of modification but please let me know if there are
+problems. I've also built it on Solaris 10 with gcc-3.4.3.
+
+A fairly recent version of the GNU c++ compiler, g++, is probably
+required (patches for other c++ compilers welcome). The program
+depends on CFITSIO being on the system library path. The
+LD_LIBRARY_PATH and CPLUS_INCLUDE_PATH can be used on Linux to specify
+the location of the libcfitsio library.
+
+When unpacked, it should be simply a matter of typing "make" on Linux
+systems. On other systems, things might be slightly more complex (I
+haven't used autoconf). On Solaris the Makefile needs to be edited to
+add -lsocket to the linkflags line. GNU make is required on all
+systems (often called gmake).
+
+5 executables, contbin, accumulate_smooth, make_region_files,
+paint_output_images and accumulate_smooth_expmap should be built.
+
+The files will be copied to "bindir" in the Makefile if "make install"
+is used. This is /usr/local/bin by default. You can copy them by hand
+if preferred.
+
+Please report any problems building or to me at the email address
+jss@ast.cam.ac.uk.
+
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+How to use the software
+-----------------------
+
+The programs all use GNU-style command line options
+(--something=foo). They also allow the parameters to be defined in
+text files, specified using "@" syntax, e.g. "program @myopts", which
+may can contain carriage returns, and unix-style comments using "#",
+
+Contour binning
+^^^^^^^^^^^^^^^
+The main contour binning program. The most useful outputs of the
+program are the binned image (conbin_out.fits), and the binmap
+(contbin_binmap.fits). The binmap is a FITS image where each pixel is
+numbered according to which bin it is in. Beware: all my programs
+count from 0, not 1! The binmap can be used to generate region files
+(see make_region_files below). Usage is as follows:
+
+contbin [OPTIONS] inimage.fits
+
+inimage.fits is a counts image to do the binning on. Optional
+arguments are as follows:
+
+--out=FILE 
+
+  Specify an output filename for the binned image. This is the input
+  image binned with the generated bins. Default is contbin_out.fits
+
+--outsn=FILE
+
+  Specify output image which shows the final signal to noise for each
+  bin, in each pixel of each bin.
+
+--outbinmap=FILE
+
+  This is a generated binmap. The binmap is a fits image, where each
+  pixel in the input image has been replaced by a number specifying
+  which bin that pixel is in. The bins are numbered from zero. Region
+  files can be produced from this file by make_region_files.
+
+--bg=FILE
+
+  This is a counts image with a background image to use for the signal
+  to noise calculations. This can have a different exposure to the
+  input image (make sure the EXPOSURE keyword is set correctly). If
+  the input and background images have exposures varying as a function
+  of position (e.g. they are the result of several images added
+  together), the --expmap and --bgexpmap options can specify FITS
+  images where the exposure of each pixel is given (in the same
+  units).
+
+--mask=FILE
+
+  An image to exclude certain regions of the image from binning
+  (e.g. point sources, regions beyond the edge of the CCD). Pixels in
+  the image should be 1 to be included, and 0 elsewhere.
+
+  A good way of making the image is to take the input image and set
+  each of the pixels to 1. farith (FTOOLS) could be used here.
+
+  farith inimage.fits 0 temp.fits MUL
+  farith temp.fits 1 allones.fits ADD
+  rm temp.fits
+
+  You would make a region file with ds9 to specify the included
+  regions and make the mask using (CIAO):
+
+  dmcopy "allones.fits[sky=region(myreg.reg)][opt full]" mask.fits
+
+  Alternatively, ask me for a program to make them directly from
+  region files.
+
+--smoothed=FILE
+
+  Rather than accumulatively smoothing the input image with the
+  background image in the program, an smoothed image can be specified
+  here. For instance, this could be an csmooth output image, or a
+  smoothed hardness map. accumulate_smooth_expmap or accumulate_smooth
+  could be used to produce this (if you do a lot of binning, it helps
+  to split the smoothing and binning operations timewise).
+
+--expmap=FILE
+--bgexpmap=FILE
+
+  Specify exposure map foreground and background images (see the --bg
+  option above for details)
+
+--sn=VAL
+
+  Specify the minimum signal to noise of each bin. This is t_b in the
+  paper. If there is no background, this is approximately the square
+  root of the number of counts.
+
+--automask
+
+  Automatically try to remove unused regions of the input image, so
+  that a mask image does not need to be supplied. This works by
+  removing 8x8 pixel regions from the input image which do not contain
+  any counts. This option is designed for a "quick look" at the
+  binning process, if you haven't made a mask image.
+
+--constrainfill
+
+  Enable the geometric constraint in the binning process, as described
+  in the paper. This ensures that the bins do not become too
+  elongated. The constraint parameter should be set with
+  --constrainval=X
+
+--constrainval=VAL
+
+  Set the geometric constraint value. --constrainfill has to be
+  specified for this to have any effect. If a bin currently has N
+  pixels, the program calculates the radius of a circle (r) with that
+  area. It will not add any new pixels greated than VAL*r away from
+  the current flux-weighted centroid of the bin. If VAL is around 1
+  then the bins are approximately spherical. Typical values are 2-3.
+
+--smoothsn=VAL
+
+  Signal to noise to smooth the image by before binning. This is 15 by
+  default. Larger values make smoothed-edged bins, but may miss small
+  features.
+
+--noscrub
+
+  An option to leave out the scrubbing process which removes small
+  bins below the signal to noise threshold. This is for testing
+  purposes.
+
+--binup
+
+  The program bins the image binning using the highest pixel in the
+  smoothed map first. This reverses this, binning from the lowest
+  pixel first. This is useful if binning using a colour map.
+
+--help
+
+  Shows the various options
+
+--version
+
+  Which version of the program this is
+
+Accumulative Smoothing
+^^^^^^^^^^^^^^^^^^^^^^
+The accumulate_smooth program implements accumulative smoothing. Its
+syntax is
+
+accumulate_smooth [OPTIONS] inimage.fits
+
+inimage.fits is the input counts fits image.
+
+The possible options are:
+
+ --bg=back.fits
+
+   Set a background counts fits image. This is taken into account for
+   the signal to noise calculations. The image should be of the same
+   size as the input image. The EXPOSURE keywords in the input
+   foreground and background images both need to be correct for this
+   to work.
+
+ --mask=mask.fits
+
+   Supply a mask image to specify which parts of the image should not
+   be smoothed. This is useful if there are point sources to be
+   removed, or there are large blank areas at the edges. The image
+   should be 1 where you want to smooth, and 0 elsewhere. See the
+   contbin command for a way of making these using CIAO.
+
+ --out=out.fits
+
+   Specify the output image filename (default acsmooth.fits)
+
+ --sn=VAL
+
+   Specify the signal to noise threshold of the smoothing
+   (default 15)
+
+
+For example:
+ accumulate_smooth --mask=mymask.fits.gz --sn=100 --out=myout.fits inimage.fits
+
+
+Accumulative smoothing (with exposure map)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+A version of the program which can take account of an exposure map of
+the image. You need to supply an exposure map and an exposure
+corrected image. These could be generated by CIAO's merge_all script.
+
+accumulate_smooth_expmap --sn=20 expcorrect.fits expmap.fits
+
+Optional arguments are --mask, --out and --sn as above.
+
+
+Making region files
+^^^^^^^^^^^^^^^^^^^
+make_region_files converts the binmap generated by the binning program
+into region files compatible with CIAO (well hopefully). You will see
+the regions it produces are pretty brain-dead (everything is made out
+of boxes). A polygon edge-following algorithm is left as an exercise
+for the reader. Usage is pretty simple:
+
+make_region_files --minx=XXXX --miny=YYYY --bin=B --outdir=outdir binmap.fits
+
+This will write region files called xaf_A.reg in directory outdir,
+where A goes from 0 to the number of regions-1.
+
+The regions are in physical coordinates. To work out the coordinates
+the program needs to know the minimum X and Y coordinates of the
+original image that went into creating the binmap. It also needs to
+know the size of the bins in these units.
+
+If your image was created in CIAO using
+
+dmcopy "in_evt2.fits[bin x=1000:2000:2,1500:2500:2]" in_image.fits
+
+then XXXX is 1000, YYYY is 1500, and B is 2.
+
+
+Making images with calculated values
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+After spectral fitting you often want to make a map showing the value
+of each bin (temperature, metallicity, etc). This program takes the
+collected spectral fit results and creates a map for each
+parameter. The format is suited to my automated spectral fitting
+tool, so some adaptation is necessary if you want to use this
+program. Please contact me if you are interested in using my automated
+spectral fitting software (xaf3).
+
+The usage is
+
+paint_output_images --binmap=binmap.fits --input_dir=/some/input/directory
+ or
+paint_output_images -n binmap.fits -i /some/input/directory
+ (short forms are accepted for the other programs, see --help)
+
+The program reads a file called region_list.txt in the input
+directory. That file contains a list of region names and the (unused
+by this program) input spectrum.
+
+e.g. region_list.txt contains
+
+xaf_0 xaf_0_grp_spec.fits
+xaf_1 xaf_1_grp_spec.fits
+...
+
+xaf_0 is the name of the zeroth region, and xaf_0_grp_spec.fits is the
+name of the input spectrum (this is unused, so this could be anything
+without a space). The program reads from files with the name appended
+by "_fit_out.txt" in the same directory as region_list.txt, for example
+
+xaf_0_fit_out.txt, xaf_1_fit_out.txt, ...
+
+These files contain a list of variable names and values,
+e.g. xaf_0_fit_out.txt could contain
+
+kT 3.0
+Z  1.0
+NH 0.1
+
+The program will "paint" in the output files kT_out.fits, Z_out.fits,
+NH_out.fits the values specified for each bin. For example, the region
+where the pixels are 0 in the binmap file, will contain 3.0 in the
+output file kT_out.fits for this example.

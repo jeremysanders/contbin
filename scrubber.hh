@@ -15,12 +15,6 @@ public:
   // renumber bins, throwing away bins with zero counts
   void renumber();
 
-  void set_constrain_fill( bool constrain_fill, double constrain_val )
-  {
-    _constrain_fill = constrain_fill;
-    _constrain_val = constrain_val;
-  }
-
   // get rid of bins with fraction of pixels >= fraction
   void scrub_large_bins( double fraction );
 
@@ -39,9 +33,6 @@ private:
   std::vector<bool> _cannot_dissolve; // set if cannot dissolve a bin
 
   const unsigned _xw, _yw;
-
-  bool _constrain_fill;
-  double _constrain_val;
 };
 
 

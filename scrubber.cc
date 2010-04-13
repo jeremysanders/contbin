@@ -21,9 +21,7 @@ scrubber::scrubber( bin_helper& helper, bin_vector& bins )
 
     _cannot_dissolve( _no_bins ),
 
-    _xw( helper.xw() ), _yw( helper.yw() ),
-
-    _constrain_fill(false), _constrain_val(5)
+    _xw( helper.xw() ), _yw( helper.yw() )
 {
 }
 
@@ -63,7 +61,7 @@ void scrubber::find_best_neighbour(bin* thebin, bool allow_unconstrained,
 		  anyneighbours = true;
 
 		  // we skip neighbours with too long a constraint if reqstd
-		  if( _constrain_fill &&
+		  if( _helper.constrain_fill() &&
 		      ! allow_unconstrained &&
 		      ! _bins[nbin].check_constraint(xp, yp) )
 		    continue;
@@ -102,7 +100,7 @@ void scrubber::dissolve_bin( bin* thebin )
       find_best_neighbour( thebin, false, &bestx, &besty, &bestbin );
 
       // if none, then ignore constraints
-      if( bestx == -1 && _constrain_fill )
+      if( bestx == -1 && _helper.constrain_fill() )
 	find_best_neighbour( thebin, true, &bestx, &besty, &bestbin );
 
       // stop dissolving bin if we have no neigbours for our remaining

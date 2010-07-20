@@ -184,18 +184,6 @@ int main(int argc, char* argv[])
       load_image(back_file, &bg_exposure, &bg_image);
     }
 
-  // load mask
-  image_short* mask_image = 0;
-  if( mask_file.empty() )
-    {
-      cout << "Using blank mask\n";
-      mask_image = new image_short( in_image->xw(), in_image->yw(), 1 );
-    }
-  else
-    {
-      load_image( mask_file, 0, &mask_image );
-    }
-
   // load expmap image
   image_float* expmap_image = 0;
   if( expmap_file.empty() )
@@ -206,6 +194,27 @@ int main(int argc, char* argv[])
   else
     {
       load_image(expmap_file, 0, &expmap_image);
+    }
+
+  // load mask
+  image_short* mask_image = 0;
+  if( mask_file.empty() )
+    {
+      cout << "Using blank mask\n";
+      mask_image = new image_short( in_image->xw(), in_image->yw(), 1 );
+
+      if( ! expmap_file.empty() )
+	{
+	  cout << "Using exposure map to create mask\n";
+	  for(unsigned x = 0; x != in_image->xw(); ++x)
+	    for(unsigned y = 0; y != in_image->yw(); ++y)
+	      if( (*expmap_image)(x, y) < 1. )
+		(*mask_image)(x, y) = 0;
+	}
+    }
+  else
+    {
+      load_image( mask_file, 0, &mask_image );
     }
 
   // make a new image full of NaNs to use as output

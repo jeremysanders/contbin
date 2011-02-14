@@ -112,7 +112,7 @@ void smoothImage(const image_float& inimage, const image_float& bgimage,
 	      }
 	  }
 
-	outimage(x, y) = (totalfg / exptimefg - totalbg / exptimebg) / totalexp;
+	outimage(x, y) = (totalfg - totalbg * exptimefg / exptimebg) / totalexp;
       }
 
   cout << '\n';

@@ -1,5 +1,5 @@
 Contour binning and accumulative smoothing software
-Version 1.2
+Version 1.4
 ------------------------------------------------------------------------------
 
 Copyright Jeremy Sanders <jss@ast.cam.ac.uk> (2006)
@@ -7,6 +7,9 @@ The reference paper is Sanders (2006), MNRAS, submitted
  This software is licensed under the GNU Public License
  See the file included as LICENSE for details
 http://www-xray.ast.cam.ac.uk/~jss/contbin/
+
+Changes:
+ 1.4: 2010-12-07: Fixes to compile on new gcc versions
 
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 

@@ -1,1 +1,1 @@
-/home/jss/newprogs/fitsio_simple/memimage.hh
+../../fitsio_simple/memimage.hh

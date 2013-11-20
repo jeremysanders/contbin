@@ -1,1 +1,1 @@
-/home/jss/newprogs/xaf3/format_string.hh
+../../xaf3/format_string.hh

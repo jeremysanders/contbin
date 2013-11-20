@@ -1,1 +1,1 @@
-/home/jss/newprogs/fitsio_simple/fitsio_simple.hh
+../../fitsio_simple/fitsio_simple.hh

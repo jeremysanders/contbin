@@ -1,0 +1,11 @@
+*.o
+*~
+*.a
+contbin
+dumpdata
+exposure_smooth
+make_region_files
+paint_output_images
+accumulate_smooth
+accumulate_smooth_expcorr
+accumulate_smooth_expmap

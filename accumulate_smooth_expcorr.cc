@@ -14,74 +14,118 @@
 #include "misc.hh"
 #include "fitsio_simple.hh"
 
-using namespace std;
-
-template <typename T> T sqr(T v) { return v*v; }
-
-struct point
+namespace
 {
-  point(int xp, int yp) : x(xp), y(yp) {}
-  int x, y;
-};
-typedef vector<point> point_vec;
-typedef vector<point_vec> point_vec_vec;
 
-class Smoother
-{
-public:
-  Smoother(const image_short& ct_image,
-           const image_float& expcorr_image,
-           const image_short& mask_image,
-           double sn)
-    : _ct_image(ct_image),
-      _expcorr_image(expcorr_image),
-      _mask_image(mask_image),
-      _xw(ct_image.xw()), _yw(ct_image.yw()),
-      _target_sn2(sn*sn),
-      out_image(ct_image.xw(), ct_image.yw(),
-                numeric_limits<double>::quiet_NaN())
+  template <typename T> T sqr(T v) { return v*v; }
+
+  struct point
   {
-    precalculate_circles();
-    precalculate_shifts();
-    reset_state();
-  }
+    point(int xp, int yp) : x(xp), y(yp) {}
+    int x, y;
+  };
+  typedef std::vector<point> point_vec;
+  typedef std::vector<point_vec> point_vec_vec;
 
-  void smooth_all();
+  // retains more precision that a standard summation
+  class KahanSum
+  {
+  public:
+    KahanSum()
+      : _sum(0), _comp(0)
+    {}
 
-private:
-  void precalculate_circles();
-  void precalculate_shifts();
-  void reset_state();
-  void add_shift(int x, int y, int r, int sign, bool doiny, bool mirror);
-  void add_circle(int x, int y, int r);
-  void remove_circle(int x, int y, int r);
-  void new_pixel(int x, int y);
+    void reset() { _sum = _comp = 0.; }
 
-  // calculate signal to noise squared
-  double sn2() const { return _tot_ct; }
+    void operator +=(double val)
+    {
+      double y = val - _comp;
+      double t = _sum + y;
+      _comp = (t - _sum) - y;
+      _sum = t;
+    }
 
-private:
-  const image_short& _ct_image;
-  const image_float& _expcorr_image;
-  const image_short& _mask_image;
-  const int _xw;
-  const int _yw;
-  const double _target_sn2;
+    double sum() const { return _sum; }
 
-  point_vec_vec _circles;
-  point_vec_vec _shift_incl;
+  private:
+    double _sum, _comp;
+  };
 
-  int _radius;
-  int _tot_ct;
-  double _tot_expcorr;
-  int _tot_pix;
+  class Smoother
+  {
+  public:
+    Smoother(const image_short& ct_image,
+             const image_float& expcorr_image,
+             const image_short& mask_image,
+             double sn)
+      : _ct_image(ct_image),
+        _expcorr_image(expcorr_image),
+        _mask_image(mask_image),
+        _xw(ct_image.xw()), _yw(ct_image.yw()),
+        _target_sn2(sn*sn),
+        out_image(ct_image.xw(), ct_image.yw(),
+                  std::numeric_limits<double>::quiet_NaN())
+    {
+      precalculate_circles();
+      precalculate_shifts();
+      reset_state();
+    }
 
-  int _last_x, _last_y;
+    void smooth_all();
 
-public:
-  image_float out_image;
-};
+  private:
+    void precalculate_circles();
+    void precalculate_shifts();
+    void reset_state();
+    void add_shift(int x, int y, int r, int sign, bool doiny, bool mirror);
+    void new_pixel(int x, int y);
 
+    // this is a template to speed up the inner loop as VAL only equals -1 and 1
+    template <int VAL> void add_or_remove_circle(int x, int y, int r)
+    {
+      const point_vec& circ(_circles[r]);
+      for(auto i = circ.begin(); i != circ.end(); ++i)
+        {
+          auto nx = x + i->x;
+          auto ny = y + i->y;
+        
+          if( nx >= 0 and nx < _xw and ny >= 0 and ny < _yw and _mask_image(nx, ny) )
+            {
+              _tot_ct += VAL*_ct_image(nx, ny);
+              _tot_expcorr += VAL*_expcorr_image(nx, ny);
+              _tot_pix += VAL;
+            }
+        }
+    }
+
+    // calculate signal to noise squared
+    double sn2() const { return _tot_ct; }
+
+  private:
+    const image_short& _ct_image;
+    const image_float& _expcorr_image;
+    const image_short& _mask_image;
+    const int _xw;
+    const int _yw;
+    const double _target_sn2;
+
+    point_vec_vec _circles;
+    point_vec_vec _shift_incl;
+
+    int _radius;
+    int _tot_ct;
+    KahanSum _tot_expcorr;
+    int _tot_pix;
+
+    int _last_x, _last_y;
+
+  public:
+    image_float out_image;
+  };
+
+}
+
+// precalculate pixels included as a function of radius in circle
 void Smoother::precalculate_circles()
 {
   auto maxrad = int(sqrt(double( sqr(_xw)+sqr(_yw) ))) + 1;
@@ -95,6 +139,7 @@ void Smoother::precalculate_circles()
       }
 }
 
+// precalculate pixels included when a circle is shifted to the right
 void Smoother::precalculate_shifts()
 {
   auto maxrad = int(sqrt(double( sqr(_xw)+sqr(_yw) ))) + 1;
@@ -117,61 +162,29 @@ void Smoother::reset_state()
 {
   _radius = 0;
   _tot_ct = 0;
-  _tot_expcorr = 0;
+  _tot_expcorr.reset();
   _tot_pix = 0;
 
   _last_x = _last_y = -9999;
 }
 
-void Smoother::add_circle(int x, int y, int r)
-{
-  const point_vec& circ(_circles[r]);
-  for(auto i = circ.begin(); i != circ.end(); ++i)
-    {
-      auto nx = x + i->x;
-      auto ny = y + i->y;
-      //cout << "add " << r << ' ' << i->x << ' ' << i->y << '\n';
-
-      if( nx >= 0 and nx < _xw and ny >= 0 and ny < _yw and _mask_image(nx, ny) )
-        {
-          _tot_ct += _ct_image(nx, ny);
-          _tot_expcorr += _expcorr_image(nx, ny);
-          _tot_pix++;
-        }
-    }
-}
-
-void Smoother::remove_circle(int x, int y, int r)
-{
-  const point_vec& circ(_circles[r]);
-  for(auto i = circ.begin(); i != circ.end(); ++i)
-    {
-      auto nx = x + i->x;
-      auto ny = y + i->y;
-      //cout << "sub " << r << ' ' << i->x << ' ' << i->y << '\n';
-
-      if( nx >= 0 and nx < _xw and ny >= 0 and ny < _yw and _mask_image(nx, ny) )
-        {
-          _tot_ct -= _ct_image(nx, ny);
-          _tot_expcorr -= _expcorr_image(nx, ny);
-          _tot_pix--;
-        }
-    }
-}
-
+// this includes the pixels in the sum when shifting a circle
+// sign: 1 or -1, depending on whether to add or subtract the shift
+// doiny: shift in y, not x
+// mirror: shift to left, not right
 void Smoother::add_shift(int x, int y, int r, int sign, bool doiny, bool mirror)
 {
   const point_vec& shift(_shift_incl[r]);
-  for(int i = 0; i != int(shift.size()); ++i)
+  for(auto i = shift.begin(); i != shift.end(); ++i)
     {
-      int dx = shift[i].x;
-      int dy = shift[i].y;
+      int dx = i->x;
+      int dy = i->y;
 
       if(mirror)
         dx = -dx;
 
       if(doiny)
-        swap(dx, dy);
+        std::swap(dx, dy);
 
       int nx = x + dx;
       int ny = y + dy;
@@ -189,8 +202,11 @@ void Smoother::new_pixel(int x, int y)
 {
   bool reverse;
 
+  // debugging
+  const bool forcereset = false;
+
   if( ((abs(x-_last_x) == 1 and _last_y == y) or
-       (_last_x == x and abs(y-_last_y) == 1))  )
+       (_last_x == x and abs(y-_last_y) == 1)) and not forcereset )
     {
       bool iny, mirror;
       iny = _last_y != y;
@@ -206,10 +222,11 @@ void Smoother::new_pixel(int x, int y)
     {
       reset_state();
       // we have to add the initial pixel, as this is checked below
-      add_circle(x, y, _radius);
+      add_or_remove_circle<1>(x, y, _radius);
       reverse = false;
     }
 
+  // fixed radius test case
   // reset_state();
   // while(_radius < 10)
   //   {
@@ -217,16 +234,12 @@ void Smoother::new_pixel(int x, int y)
   //     add_circle(x, y, _radius);
   //   }
 
-  // debugging
-  // reset_state();
-  // reverse = false;
-
   if(not reverse)
     {
       while(sn2() < _target_sn2)
         {
           _radius++;
-          add_circle(x, y, _radius);
+          add_or_remove_circle<1>(x, y, _radius);
         }
     }
   else
@@ -242,7 +255,7 @@ void Smoother::new_pixel(int x, int y)
           auto oldpix = _tot_pix;
           auto oldsn2 = sn2();
 
-          remove_circle(x, y, _radius);
+          add_or_remove_circle<-1>(x, y, _radius);
           auto newsn2 = sn2();
 
           if( oldsn2 >= _target_sn2 and newsn2 < _target_sn2 )
@@ -258,8 +271,7 @@ void Smoother::new_pixel(int x, int y)
         }
     }
 
-  //if(_mask_image(x, y))
-  out_image(x, y) = _tot_expcorr / _tot_pix;
+  out_image(x, y) = _tot_expcorr.sum() / _tot_pix;
 
   _last_x = x;
   _last_y = y;
@@ -270,6 +282,19 @@ void Smoother::smooth_all()
   int x = 0;
   int y = 0;
   int xdir = +1;
+
+  const int ydelt = _yw / 10;
+
+  // this is a lambda function to show y value every few steps
+  auto showy = [&y, &ydelt]()
+    {
+          if(y % ydelt == 0)
+            {
+              std::cout << y/ydelt << ' ';
+              std::cout.flush();
+            }
+    };
+
   while(y<_yw)
     {
       if(_mask_image(x, y))
@@ -281,39 +306,44 @@ void Smoother::smooth_all()
           xdir = +1;
           x++;
           y++;
-          cout << y << '\n';
+          showy();
         }
       if(x == _xw)
         {
           xdir = -1;
           x--;
           y++;
-          cout << y << '\n';
+          showy();
         }
     }
+
+  std::cout << '\n';
 }
 
 ////////////////////////////////////////////////////////////////////////////
 
 // accumulate smoothing
 
-template<class T> void load_image(const string& filename,
-				  T** image)
+namespace
 {
-  FITSFile ds(filename);
-  ds.readImage(image);
-}
+  template<class T> void load_image(const std::string& filename,
+                                    T** image)
+  {
+    FITSFile ds(filename);
+    ds.readImage(image);
+  }
 
-void write_image(const string& filename, const image_float& img)
-{
-  FITSFile ds(filename, FITSFile::Create);
-  ds.writeImage(img);
+  void write_image(const std::string& filename, const image_float& img)
+  {
+    FITSFile ds(filename, FITSFile::Create);
+    ds.writeImage(img);
+  }
 }
 
 int main(int argc, char* argv[])
 {
-  string back_file, mask_file;
-  string out_file = "acsmooth.fits";
+  std::string back_file, mask_file;
+  std::string out_file = "acsmooth.fits";
   double sn = 15;
 
   parammm::param params(argc, argv);

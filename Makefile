@@ -10,7 +10,7 @@ linkflags=-lcfitsio -Lparammm -lparammm
 bindir=/usr/local/bin
 
 # sensible compiler flags
-export CXXFLAGS=-O2 -g -Wall
+export CXXFLAGS=-O2 -g -Wall -std=c++0x
 export CXX=g++
 
 ##############################################################################
@@ -19,7 +19,7 @@ export CXX=g++
 default: all
 
 programs=contbin accumulate_smooth accumulate_smooth_expmap make_region_files \
-	paint_output_images dumpdata exposure_smooth
+	paint_output_images dumpdata exposure_smooth accumulate_smooth_expcorr
 all: $(programs)
 
 clean:
@@ -63,6 +63,13 @@ acc_smooth_expmap_objs=accumulate_smooth_expmap.o \
 
 accumulate_smooth_expmap: $(acc_smooth_expmap_objs) parammm/libparammm.a
 	$(CXX) -o accumulate_smooth_expmap $(acc_smooth_expmap_objs) \
+		$(linkflags)
+
+acc_smooth_expcorr_objs=accumulate_smooth_expcorr.o \
+	fitsio_simple.o memimage.o
+
+accumulate_smooth_expcorr: $(acc_smooth_expcorr_objs) parammm/libparammm.a
+	$(CXX) -o accumulate_smooth_expcorr $(acc_smooth_expcorr_objs) \
 		$(linkflags)
 
 make_region_files_objs=make_region_files.o \

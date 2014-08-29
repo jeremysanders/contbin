@@ -29,7 +29,7 @@ namespace Util
     
     // other convenient ways to get the string
     operator const std::string&() { return this->get(); }
-    operator const char*() { return this->get().c_str(); }
+    //operator const char*() { return this->get().c_str(); }
 
   private:
     // do the formatting

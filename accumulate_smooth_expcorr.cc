@@ -333,10 +333,12 @@ namespace
     ds.readImage(image);
   }
 
-  void write_image(const std::string& filename, const image_float& img)
+  void write_image(const std::string& filename, const image_float& img,
+                   FITSFile* indataset)
   {
     FITSFile ds(filename, FITSFile::Create);
     ds.writeImage(img);
+    indataset->copyHeaderTo(ds);
   }
 }
 
@@ -376,7 +378,8 @@ int main(int argc, char* argv[])
     }
 
   image_short* in_image;
-  load_image(params.args()[0], &in_image);
+  FITSFile indataset(params.args()[0]);
+  indataset.readImage(&in_image);
 
   image_float* expcorr_image;
   load_image(params.args()[1], &expcorr_image);
@@ -394,7 +397,7 @@ int main(int argc, char* argv[])
   Smoother smoother(*in_image, *expcorr_image, *mask_image, sn);
   smoother.smooth_all();
 
-  write_image(out_file, smoother.out_image);
+  write_image(out_file, smoother.out_image, &indataset);
 
   delete in_image;
   delete expcorr_image;

@@ -17,9 +17,10 @@
 
 namespace
 {
-
+  // square function
   template <typename T> T sqr(T v) { return v*v; }
 
+  // structure to collect x,y values
   struct point
   {
     point(int xp, int yp) : x(xp), y(yp) {}
@@ -251,11 +252,13 @@ void Smoother::new_pixel(int x, int y)
   if( ((abs(x-_last_x) == 1 and _last_y == y) or
        (_last_x == x and abs(y-_last_y) == 1)) and not forcereset )
     {
-      bool iny, mirror;
-      iny = _last_y != y;
-      mirror = _last_x > x or _last_y > y;
+      // shift along the summed values to the next pixel
+      const bool iny = _last_y != y;
+      const bool mirror = _last_x > x or _last_y > y;
 
+      // remove points from previous circle
       add_shift(_last_x, _last_y, _state.radius, -1, iny, not mirror);
+      // add points from new circle
       add_shift(x, y, _state.radius, 1, iny, mirror);
 
       // move backwards or forwards in radius depending on current S/N

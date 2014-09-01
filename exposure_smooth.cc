@@ -77,10 +77,22 @@ namespace
       if( counts.sum() == 0. and back.sum() == 0. )
         return 0;
       else
-        // note, note that the max prevents the S/N being -ve and giving a large
-        // postive sn2
-        return sqr(std::max((counts.sum()/_fgexp - back.sum()/_bgexp), 0.)) /
-          (counts.sum()/sqr(_fgexp) + back.sum()/sqr(_bgexp));
+        {
+          // note, note that the max prevents the S/N being -ve and giving a large
+          // postive sn2
+          //std::cout << radius << ' ' << counts.sum() << ' ' << back.sum() << ' '
+          //          << _fgexp << ' ' << _bgexp << '\n';
+
+          double sig = counts.sum()/_fgexp - back.sum()/_bgexp;
+          double sig2 = sig > 0 ? sqr(sig) : 0;
+          double noise2 = counts.sum()/sqr(_fgexp) + back.sum()/sqr(_bgexp);
+
+          //std::cout << sig << ' ' << sig2 << ' ' << noise2 << ' ' << sig2/noise2 <<  '\n';
+
+          //std::cout << radius << ' ' << sqrt(sig2/noise2) << '\n';
+
+          return sig2 / noise2;
+        }
     }
 
     // return background and exposure-corrected surface brightness
@@ -114,8 +126,10 @@ namespace
         _expmap_image(expmap_image),
         _mask_image(mask_image),
         _xw(ct_image.xw()), _yw(ct_image.yw()),
+        _maxrad(int(sqrt(double( sqr(_xw)+sqr(_yw) ))) + 1),
         _target_sn2(sqr(sn)),
         _state(exptimefg, exptimebg),
+
         out_image(ct_image.xw(), ct_image.yw(),
                   std::numeric_limits<double>::quiet_NaN())
     {
@@ -136,6 +150,9 @@ namespace
     // this is a template to speed up the inner loop as VAL only equals -1 and 1
     template <int VAL> void add_or_remove_circle(int x, int y, int r)
     {
+      if(r >= int(_circles.size()))
+        return;
+
       const point_vec& circ(_circles[r]);
       for(auto i = circ.begin(); i != circ.end(); ++i)
         {
@@ -158,6 +175,7 @@ namespace
     const image_short& _mask_image;
     const int _xw;
     const int _yw;
+    const int _maxrad;
     const double _target_sn2;
 
     State _state;
@@ -176,8 +194,7 @@ namespace
 // precalculate pixels included as a function of radius in circle
 void Smoother::precalculate_circles()
 {
-  auto maxrad = int(sqrt(double( sqr(_xw)+sqr(_yw) ))) + 1;
-  _circles.resize(maxrad);
+  _circles.resize(_maxrad);
 
   for(auto y=-(_yw-1); y<_yw; ++y)
     for(auto x=-(_xw-1); x<_xw; ++x)
@@ -190,8 +207,7 @@ void Smoother::precalculate_circles()
 // precalculate pixels included when a circle is shifted to the right
 void Smoother::precalculate_shifts()
 {
-  auto maxrad = int(sqrt(double( sqr(_xw)+sqr(_yw) ))) + 1;
-  _shift_incl.resize(maxrad);
+  _shift_incl.resize(_maxrad);
 
   for(auto y=-(_yw-1); y<_yw; ++y)
     for(auto x=-(_xw-1); x<_xw; ++x)
@@ -244,6 +260,8 @@ void Smoother::add_shift(int x, int y, int r, int sign, bool doiny, bool mirror)
 
 void Smoother::new_pixel(int x, int y)
 {
+  //std::cout << x << ' ' << y << '\n';
+
   bool reverse;
 
   // debugging
@@ -284,11 +302,24 @@ void Smoother::new_pixel(int x, int y)
     {
       // Standard forward increase of radius of the bin
 
-      while(_state.sn2() < _target_sn2)
+      State maxstate(_state);
+      double maxsn2 = -1;
+      double hsn2;
+      for(;;)
         {
+          hsn2 = _state.sn2();
+          if(hsn2 >= _target_sn2 or _state.radius == (_maxrad-1))
+            break;
+          if(hsn2 > maxsn2)
+            {
+              maxstate = _state;
+              maxsn2 = hsn2;
+            }
           _state.radius++;
           add_or_remove_circle<1>(x, y, _state.radius);
         }
+      if(hsn2 < _target_sn2)
+        _state = maxstate;
     }
   else
     {
@@ -317,6 +348,14 @@ void Smoother::new_pixel(int x, int y)
 
   out_image(x, y) = _state.pixval();
 
+  if(_state.radius == _maxrad-1)
+    {
+      // S/N not reached, so we have to start again next time
+      //std::cout << "reset\n";
+      //reset_state();
+      exit(1);
+    }
+
   _last_x = x;
   _last_y = y;
 }
@@ -327,7 +366,7 @@ void Smoother::smooth_all()
   int y = 0;
   int xdir = +1;
 
-  const int ydelt = _yw / 10;
+  const int ydelt = _yw / 20;
 
   // this is a lambda function to show y value every few steps
   auto showy = [&y, &ydelt]()

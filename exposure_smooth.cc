@@ -1,417 +1,128 @@
-// accumulate-smoothing with exposure map
-// Jeremy Sanders 2002-2014
-// Released under the GNU Public License
-
-#include <vector>
-#include <cassert>
-#include <iostream>
-#include <algorithm>
 #include <string>
+#include <vector>
+#include <algorithm>
+#include <cmath>
 #include <limits>
 
 #include "parammm/parammm.hh"
-
-#include "misc.hh"
 #include "fitsio_simple.hh"
+#include "misc.hh"
+
 #include "image_disk_access.hh"
 
-namespace
+// this is a program to accumulatively smooth an X-ray image
+// with an optional background image and exposure map image
+
+// it assumes that the background image has the same relative exposure map
+// as the fg image, but uses the EXPOSURE key to calculate the fg/bg exposure
+// time ratio
+
+using std::string;
+using std::cout;
+using std::vector;
+using std::sqrt;
+using std::max;
+
+// basic stuct to store integer x, y points
+struct point
 {
-  // square function
-  template <typename T> T sqr(T v) { return v*v; }
+  point(int _x, int _y) : x(_x), y(_y) {};
 
-  // structure to collect x,y values
-  struct point
-  {
-    point(int xp, int yp) : x(xp), y(yp) {}
-    int x, y;
-  };
-  typedef std::vector<point> point_vec;
-  typedef std::vector<point_vec> point_vec_vec;
+  int x, y;
+};
 
-  // retains more precision that a standard summation
-  class KahanSum
-  {
-  public:
-    KahanSum()
-      : _sum(0), _comp(0)
-    {}
+typedef vector<point> point_vec;
+typedef vector<point_vec> point_vec_vec;
 
-    void reset() { _sum = _comp = 0.; }
-
-    void operator +=(double val)
-    {
-      double y = val - _comp;
-      double t = _sum + y;
-      _comp = (t - _sum) - y;
-      _sum = t;
-    }
-
-    double sum() const { return _sum; }
-
-  private:
-    double _sum, _comp;
-  };
-
-  // for keeping track of the smoothing process
-  // adds the total cts, background and exposure
-  struct State
-  {
-    State(double fgexp, double bgexp)
-      : _fgexp(fgexp), _bgexp(bgexp)
-    {
-      reset();
-    }
-
-    void reset()
-    {
-      radius = 0;
-      counts.reset();
-      back.reset();
-      exposure.reset();
-    }
-
-    // get square of the signal to noise
-    double sn2() const
-    {
-      if( counts.sum() == 0. and back.sum() == 0. )
-        return 0;
-      else
-        {
-          // note, note that the max prevents the S/N being -ve and giving a large
-          // postive sn2
-          //std::cout << radius << ' ' << counts.sum() << ' ' << back.sum() << ' '
-          //          << _fgexp << ' ' << _bgexp << '\n';
-
-          double sig = counts.sum()/_fgexp - back.sum()/_bgexp;
-          double sig2 = sig > 0 ? sqr(sig) : 0;
-          double noise2 = counts.sum()/sqr(_fgexp) + back.sum()/sqr(_bgexp);
-
-          //std::cout << sig << ' ' << sig2 << ' ' << noise2 << ' ' << sig2/noise2 <<  '\n';
-
-          //std::cout << radius << ' ' << sqrt(sig2/noise2) << '\n';
-
-          return sig2 / noise2;
-        }
-    }
-
-    // return background and exposure-corrected surface brightness
-    double pixval() const
-    {
-      return (counts.sum() - back.sum()*_fgexp/_bgexp) / exposure.sum();
-    }
-
-    int radius;
-    KahanSum counts;
-    KahanSum back;
-    KahanSum exposure;
-
-  private:
-    double _fgexp;
-    double _bgexp;
-  };
-
-  // class for doing smoothing
-  class Smoother
-  {
-  public:
-    Smoother(const image_float& ct_image,
-             const image_float& bg_image,
-             const image_float& expmap_image,
-             const image_short& mask_image,
-             double exptimefg, double exptimebg,
-             double sn)
-      : _ct_image(ct_image),
-        _bg_image(bg_image),
-        _expmap_image(expmap_image),
-        _mask_image(mask_image),
-        _xw(ct_image.xw()), _yw(ct_image.yw()),
-        _maxrad(int(sqrt(double( sqr(_xw)+sqr(_yw) ))) + 1),
-        _target_sn2(sqr(sn)),
-        _state(exptimefg, exptimebg),
-
-        out_image(ct_image.xw(), ct_image.yw(),
-                  std::numeric_limits<double>::quiet_NaN())
-    {
-      precalculate_circles();
-      precalculate_shifts();
-      reset_state();
-    }
-
-    void smooth_all();
-
-  private:
-    void precalculate_circles();
-    void precalculate_shifts();
-    void reset_state();
-    void add_shift(int x, int y, int r, int sign, bool doiny, bool mirror);
-    void new_pixel(int x, int y);
-
-    // this is a template to speed up the inner loop as VAL only equals -1 and 1
-    template <int VAL> void add_or_remove_circle(int x, int y, int r)
-    {
-      if(r >= int(_circles.size()))
-        return;
-
-      const point_vec& circ(_circles[r]);
-      for(auto i = circ.begin(); i != circ.end(); ++i)
-        {
-          auto nx = x + i->x;
-          auto ny = y + i->y;
-        
-          if( nx >= 0 and nx < _xw and ny >= 0 and ny < _yw and _mask_image(nx, ny) )
-            {
-              _state.counts   += VAL*_ct_image(nx, ny);
-              _state.back     += VAL*_bg_image(nx, ny);
-              _state.exposure += VAL*_expmap_image(nx, ny);
-            }
-        }
-    }
-
-  private:
-    const image_float& _ct_image;
-    const image_float& _bg_image;
-    const image_float& _expmap_image;
-    const image_short& _mask_image;
-    const int _xw;
-    const int _yw;
-    const int _maxrad;
-    const double _target_sn2;
-
-    State _state;
-
-    point_vec_vec _circles;
-    point_vec_vec _shift_incl;
-
-    int _last_x, _last_y;
-
-  public:
-    image_float out_image;
-  };
-
-}
-
-// precalculate pixels included as a function of radius in circle
-void Smoother::precalculate_circles()
+// get the points as a function of integer radius
+void collectRadii(const int maxrad, point_vec_vec& retn)
 {
-  _circles.resize(_maxrad);
+  retn.clear();
+  retn.resize( int( M_SQRT2*maxrad )+1 );
 
-  for(auto y=-(_yw-1); y<_yw; ++y)
-    for(auto x=-(_xw-1); x<_xw; ++x)
+  for( int x = -maxrad; x <= maxrad; ++x )
+    for( int y = -maxrad; y <= maxrad; ++y )
       {
-        auto r = int( sqrt(double( sqr(x)+sqr(y) )) );
-        _circles[r].push_back( point(x, y) );
+	const size_t r = size_t( sqrt(x*x+y*y) );
+	retn[r].push_back( point(x, y) );
       }
 }
 
-// precalculate pixels included when a circle is shifted to the right
-void Smoother::precalculate_shifts()
+// calculate signal to noise ratio given fg and bg counts
+// and exposure times fgtime and bgtime
+double SNratio(double fg, double bg, double fgtime, double bgtime)
 {
-  _shift_incl.resize(_maxrad);
+  if( fg == 0. and bg == 0. )
+    return 0;
 
-  for(auto y=-(_yw-1); y<_yw; ++y)
-    for(auto x=-(_xw-1); x<_xw; ++x)
+  return (fg / fgtime - bg / bgtime) / sqrt( fg / (fgtime*fgtime) +
+					     bg / (bgtime*bgtime) );
+
+}
+
+// do the actual smoothing
+void smoothImage(const image_float& inimage, const image_float& bgimage,
+		 const image_float& expmapimage,
+		 const image_short& maskimage,
+		 double sn, double exptimefg, double exptimebg,
+		 image_float& outimage)
+{
+  point_vec_vec ptsatradii;
+  collectRadii( max(inimage.xw(), inimage.yw()), ptsatradii);
+
+  const int xw = inimage.xw();
+  const int yw = inimage.yw();
+
+  for(int y = 0; y < yw; ++y )
+    for(int x = 0; x < xw; ++x )
       {
-        auto r1 = int( sqrt(double(sqr(x) + sqr(y))) );
-        auto r2 = int( sqrt(double(sqr(x+1) + sqr(y))) );
+	if( x == 0 and y % (yw/10) == 0 )
+	  {
+	    cout << y / (yw/10) << ' ';
+	    cout.flush();
+	  }
 
-        if( r1 < r2 )
-          {
-            _shift_incl[r1].push_back( point(x, y) );
-          }
+	if( ! maskimage(x, y) )
+	  continue;
+
+	double totalfg = 0.;
+	double totalbg = 0.;
+	double totalexp = 0.;
+	int pixels = 0;
+	
+	for( size_t radius = 0;
+	     SNratio(totalfg, totalbg, exptimefg, exptimebg) < sn;
+	     ++radius )
+	  {
+	    const point_vec& pts = ptsatradii[radius];
+	    for(point_vec::const_iterator p = pts.begin(); p != pts.end(); ++p)
+	      {
+		const int nx = x + p->x;
+		const int ny = y + p->y;
+		
+		if( nx < 0 or ny < 0 or nx >= xw or ny >= yw or !maskimage(nx, ny) )
+		  {
+		    continue;
+		  }		    
+
+		totalfg += inimage(nx, ny);
+		totalbg += bgimage(nx, ny);
+		totalexp += expmapimage(nx, ny);
+		pixels++;
+	      }
+	  }
+
+	outimage(x, y) = (totalfg - totalbg * exptimefg / exptimebg) / totalexp;
       }
+
+  cout << '\n';
 }
-
-void Smoother::reset_state()
-{
-  _state.reset();
-  _last_x = _last_y = -9999;
-}
-
-// this includes the pixels in the sum when shifting a circle
-// sign: 1 or -1, depending on whether to add or subtract the shift
-// doiny: shift in y, not x
-// mirror: shift to left, not right
-void Smoother::add_shift(int x, int y, int r, int sign, bool doiny, bool mirror)
-{
-  const point_vec& shift(_shift_incl[r]);
-  for(auto i = shift.begin(); i != shift.end(); ++i)
-    {
-      int dx = i->x;
-      int dy = i->y;
-
-      if(mirror)
-        dx = -dx;
-
-      if(doiny)
-        std::swap(dx, dy);
-
-      int nx = x + dx;
-      int ny = y + dy;
-
-      if( nx >= 0 and nx < _xw and ny >= 0 and ny < _yw and _mask_image(nx, ny) )
-        {
-          _state.counts   += sign*_ct_image(nx, ny);
-          _state.back     += sign*_bg_image(nx, ny);
-          _state.exposure += sign*_expmap_image(nx, ny);
-        }
-    }
-}
-
-void Smoother::new_pixel(int x, int y)
-{
-  //std::cout << x << ' ' << y << '\n';
-
-  bool reverse;
-
-  // debugging
-  const bool forcereset = false;
-
-  if( ((abs(x-_last_x) == 1 and _last_y == y) or
-       (_last_x == x and abs(y-_last_y) == 1)) and not forcereset )
-    {
-      // shift along the summed values to the next pixel
-      const bool iny = _last_y != y;
-      const bool mirror = _last_x > x or _last_y > y;
-
-      // remove points from previous circle
-      add_shift(_last_x, _last_y, _state.radius, -1, iny, not mirror);
-      // add points from new circle
-      add_shift(x, y, _state.radius, 1, iny, mirror);
-
-      // move backwards or forwards in radius depending on current S/N
-      reverse = _state.sn2() >= _target_sn2;
-    }
-  else
-    {
-      reset_state();
-      // we have to add the initial pixel, as this is checked below
-      add_or_remove_circle<1>(x, y, _state.radius);
-      reverse = false;
-    }
-
-  // fixed radius test case
-  // reset_state();
-  // while(_radius < 10)
-  //   {
-  //     _radius++;
-  //     add_circle(x, y, _radius);
-  //   }
-
-  if(not reverse)
-    {
-      // Standard forward increase of radius of the bin
-
-      State maxstate(_state);
-      double maxsn2 = -1;
-      double hsn2;
-      for(;;)
-        {
-          hsn2 = _state.sn2();
-          if(hsn2 >= _target_sn2 or _state.radius == (_maxrad-1))
-            break;
-          if(hsn2 > maxsn2)
-            {
-              maxstate = _state;
-              maxsn2 = hsn2;
-            }
-          _state.radius++;
-          add_or_remove_circle<1>(x, y, _state.radius);
-        }
-      if(hsn2 < _target_sn2)
-        _state = maxstate;
-    }
-  else
-    {
-      // Reverse direction.
-      // We check whether subtracting this radius
-      // pushes us under the threshold.
-
-      auto oldsn2 = _state.sn2();
-      while(_state.radius >= 0)
-        {
-          auto oldstate = _state;
-          add_or_remove_circle<-1>(x, y, _state.radius);
-          auto newsn2 = _state.sn2();
-
-          if( oldsn2 >= _target_sn2 and newsn2 < _target_sn2 )
-            {
-              // was fine, last time, so reset
-              _state = oldstate;
-              break;
-            }
-
-          _state.radius--;
-          oldsn2 = newsn2;
-        }
-    }
-
-  out_image(x, y) = _state.pixval();
-
-  if(_state.radius == _maxrad-1)
-    {
-      // S/N not reached, so we have to start again next time
-      //std::cout << "reset\n";
-      //reset_state();
-      exit(1);
-    }
-
-  _last_x = x;
-  _last_y = y;
-}
-
-void Smoother::smooth_all()
-{
-  int x = 0;
-  int y = 0;
-  int xdir = +1;
-
-  const int ydelt = _yw / 20;
-
-  // this is a lambda function to show y value every few steps
-  auto showy = [&y, &ydelt]()
-    {
-          if(y % ydelt == 0)
-            {
-              std::cout << y/ydelt << ' ';
-              std::cout.flush();
-            }
-    };
-
-  while(y<_yw)
-    {
-      if(_mask_image(x, y))
-        new_pixel(x, y);
-
-      x += xdir;
-      if(x == -1)
-        {
-          xdir = +1;
-          x++;
-          y++;
-          showy();
-        }
-      if(x == _xw)
-        {
-          xdir = -1;
-          x--;
-          y++;
-          showy();
-        }
-    }
-
-  std::cout << '\n';
-}
-
-////////////////////////////////////////////////////////////////////////////
-
-// accumulate smoothing
 
 int main(int argc, char* argv[])
 {
   double sn = 15;
-  std::string back_file, mask_file, expmap_file;
-  std::string out_file = "expsmooth.fits";
+  string back_file, mask_file, expmap_file;
+  string out_file = "expsmooth.fits";
 
   parammm::param params(argc, argv);
   params.add_switch( parammm::pswitch( "bg", 'b',
@@ -437,10 +148,10 @@ int main(int argc, char* argv[])
 
   params.set_autohelp("Usage: exposure_smooth [OPTIONS] infile.fits\n"
 		      "Accumulative smoothing program with exposure map.\n"
-		      "Copyright Jeremy Sanders 2009-2014",
-		      "Report bugs to <jsanders@mpe.mpg.de>");
+		      "Copyright Jeremy Sanders 2009",
+		      "Report bugs to <jss@ast.cam.ac.uk>");
   params.enable_autohelp();
-  params.enable_autoversion("0.2",
+  params.enable_autoversion("0.1",
 			    "Jeremy Sanders",
 			    "Licenced under the GPL - see the file COPYING");
   params.enable_at_expansion();
@@ -451,7 +162,7 @@ int main(int argc, char* argv[])
       params.show_autohelp();
     }
 
-  const std::string in_filename = params.args()[0];
+  const string in_filename = params.args()[0];
 
   // load fg image
   double in_exposure = 1.;
@@ -464,7 +175,7 @@ int main(int argc, char* argv[])
 
   if( back_file.empty() )
     {
-      std::cout << "Using blank background\n";
+      cout << "Using blank background\n";
       bg_image = new image_float(in_image->xw(), in_image->yw(), 0.);
       bg_exposure = in_exposure;
     }
@@ -477,7 +188,7 @@ int main(int argc, char* argv[])
   image_float* expmap_image = 0;
   if( expmap_file.empty() )
     {
-      std::cout << "Using blank exposure map\n";
+      cout << "Using blank exposure map\n";
       expmap_image = new image_float(in_image->xw(), in_image->yw(), 1.);
      }
   else
@@ -489,12 +200,12 @@ int main(int argc, char* argv[])
   image_short* mask_image = 0;
   if( mask_file.empty() )
     {
-      std::cout << "Using blank mask\n";
+      cout << "Using blank mask\n";
       mask_image = new image_short( in_image->xw(), in_image->yw(), 1 );
 
       if( ! expmap_file.empty() )
 	{
-	  std::cout << "Using exposure map to create mask\n";
+	  cout << "Using exposure map to create mask\n";
 	  for(unsigned x = 0; x != in_image->xw(); ++x)
 	    for(unsigned y = 0; y != in_image->yw(); ++y)
 	      if( (*expmap_image)(x, y) < 1. )
@@ -506,20 +217,21 @@ int main(int argc, char* argv[])
       load_image( mask_file, 0, &mask_image );
     }
 
+  // make a new image full of NaNs to use as output
+  image_float* out_image = new image_float(in_image->xw(), in_image->yw(),
+					   std::numeric_limits<float>::quiet_NaN());
 
   // actually do the work
-  Smoother smoother(*in_image, *bg_image, *expmap_image, *mask_image,
-                    in_exposure, bg_exposure, sn);
-  smoother.smooth_all();
+  smoothImage(*in_image, *bg_image, *expmap_image, *mask_image,
+	      sn, in_exposure, bg_exposure, *out_image);
 
   // write output image
-  write_image(out_file, smoother.out_image);
+  write_image(out_file, *out_image);
 
   // clean up
   delete in_image;
   delete bg_image;
   delete mask_image;
   delete expmap_image;
-
-  return 0;
+  delete out_image;
 }

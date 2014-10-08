@@ -1,6 +1,7 @@
 #include <iostream>
 #include <algorithm>
 #include <cassert>
+#include <iomanip>
 
 #include "scrubber.hh"
 
@@ -172,6 +173,15 @@ void scrubber::scrub()
       // get rid of that bin (if it cannot be disolved, it doesn't matter
       dissolve_bin( *lowest_bin );
       bin_ptrs.erase( lowest_bin );
+
+      // show progress to user
+      if( bin_ptrs.size() % 10 == 0 )
+        {
+          std::cout << std::setw(5) << bin_ptrs.size() << ' ';
+          std::cout.flush();
+          if( bin_ptrs.size() % 100 == 0 )
+            std::cout << '\n';
+        }
     }
 
   std::cout << "(i) Done\n";

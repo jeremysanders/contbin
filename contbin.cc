@@ -19,7 +19,7 @@
 #include "flux_estimator.hh"
 #include "fitsio_simple.hh"
 
-const char* const CONTBIN_VERSION = "1.3";
+const char* const CONTBIN_VERSION = "1.5";
 
 using std::string;
 using std::vector;
@@ -150,8 +150,8 @@ program::program(int argc, char **argv)
 
   params.set_autohelp("Usage: contbin [OPTIONS] file.fits\n"
 		      "Contour binning program\n"
-		      "Written by Jeremy Sanders 2002-2010",
-		      "Report bugs to <jss@ast.cam.ac.uk>");
+		      "Written by Jeremy Sanders 2002-2014",
+		      "Report bugs to <jeremy@jeremysanders.net>");
   params.enable_autohelp();
   params.enable_autoversion(CONTBIN_VERSION,
 			    "Jeremy Sanders",

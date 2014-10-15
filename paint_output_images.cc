@@ -200,7 +200,7 @@ void painter::paint_variables()
       Util::FormatString filename("%1/%2_out.fits");
       filename << m_output_dir << ends << param->first << ends;
 
-      FITSFile file(filename, FITSFile::Create);
+      FITSFile file(filename.get(), FITSFile::Create);
       file.writeImage(im);
       binmapds.copyHeaderTo(file);
       file.writeDatestamp("paint_output_images");
@@ -262,12 +262,12 @@ void painter::read_bin_list()
   Util::FormatString filename("%1/region_list.txt");
   filename << m_input_dir << ends;
 
-  ifstream infile(filename);
+  ifstream infile(filename.get());
 
   if( ! infile )
     {
       cerr << "Cannot open list of region file "
-	   << filename << '\n';
+	   << filename.get() << '\n';
       exit(1);
     }
 
@@ -287,7 +287,7 @@ void painter::read_bin_list()
 	  resfile << m_input_dir << ends
 		  << name << ends;
 	  const int num = get_number(name);
-	  m_binlist.push_back( Bin(resfile, num) );
+	  m_binlist.push_back( Bin(resfile.get(), num) );
 	}
     }
 }

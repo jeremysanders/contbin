@@ -78,6 +78,7 @@ private:
   string m_binmap_filename;
   string m_input_dir;
   string m_output_dir;
+  bool m_gzip;
 
   AllDataMap m_output_data;
   BinList m_binlist;
@@ -86,7 +87,8 @@ private:
 painter::painter(int argc, char **argv)
   : m_binmap_filename("binmap.fits"),
     m_input_dir("."),
-    m_output_dir(".")
+    m_output_dir("."),
+    m_gzip(false)
 {
 
   parammm::param params(argc, argv);
@@ -106,6 +108,10 @@ painter::painter(int argc, char **argv)
 				      "Output directory for FITS images"
 				      " (def. '.')",
 				      "DIR") );
+  params.add_switch( parammm::pswitch("gzip", 0,
+				      parammm::pbool_noopt(&m_gzip),
+				      "Gzip output files",
+				      ""));
 
   params.set_autohelp("Usage: paint_output_images [OPTION]\n"
 		      "Make FITS images from fit results\n"
@@ -197,8 +203,9 @@ void painter::paint_variables()
 	  }
 
       // write output image
-      Util::FormatString filename("%1/%2_out.fits");
+      Util::FormatString filename("%1/%2_out.fits%3");
       filename << m_output_dir << ends << param->first << ends;
+      filename << (m_gzip ? ".gz" : "") << ends;
 
       FITSFile file(filename.get(), FITSFile::Create);
       file.writeImage(im);

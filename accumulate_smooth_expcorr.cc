@@ -285,16 +285,6 @@ void Smoother::smooth_all()
 
   const int ydelt = _yw / 10;
 
-  // this is a lambda function to show y value every few steps
-  auto showy = [&y, &ydelt]()
-    {
-          if(y % ydelt == 0)
-            {
-              std::cout << y/ydelt << ' ';
-              std::cout.flush();
-            }
-    };
-
   while(y<_yw)
     {
       if(_mask_image(x, y))
@@ -306,14 +296,22 @@ void Smoother::smooth_all()
           xdir = +1;
           x++;
           y++;
-          showy();
+          if(y % ydelt == 0)
+            {
+              std::cout << y/ydelt << ' ';
+              std::cout.flush();
+            }
         }
       if(x == _xw)
         {
           xdir = -1;
           x--;
           y++;
-          showy();
+          if(y % ydelt == 0)
+            {
+              std::cout << y/ydelt << ' ';
+              std::cout.flush();
+            }
         }
     }
 

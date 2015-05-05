@@ -269,7 +269,7 @@ void painter::read_bin_list()
   Util::FormatString filename("%1/region_list.txt");
   filename << m_input_dir << ends;
 
-  ifstream infile(filename.get());
+  ifstream infile(filename.get().c_str());
 
   if( ! infile )
     {

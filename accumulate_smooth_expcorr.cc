@@ -84,10 +84,10 @@ namespace
     template <int VAL> void add_or_remove_circle(int x, int y, int r)
     {
       const point_vec& circ(_circles[r]);
-      for(auto i = circ.begin(); i != circ.end(); ++i)
+      for(point_vec::const_iterator i = circ.begin(); i != circ.end(); ++i)
         {
-          auto nx = x + i->x;
-          auto ny = y + i->y;
+          int nx = x + i->x;
+          int ny = y + i->y;
         
           if( nx >= 0 and nx < _xw and ny >= 0 and ny < _yw and _mask_image(nx, ny) )
             {
@@ -128,13 +128,13 @@ namespace
 // precalculate pixels included as a function of radius in circle
 void Smoother::precalculate_circles()
 {
-  auto maxrad = int(sqrt(double( sqr(_xw)+sqr(_yw) ))) + 1;
+  int maxrad = int(sqrt(double( sqr(_xw)+sqr(_yw) ))) + 1;
   _circles.resize(maxrad);
 
-  for(auto y=-(_yw-1); y<_yw; ++y)
-    for(auto x=-(_xw-1); x<_xw; ++x)
+  for(int y=-(_yw-1); y<_yw; ++y)
+    for(int x=-(_xw-1); x<_xw; ++x)
       {
-        auto r = int( sqrt(double( sqr(x)+sqr(y) )) );
+        int r = int( sqrt(double( sqr(x)+sqr(y) )) );
         _circles[r].push_back( point(x, y) );
       }
 }
@@ -142,14 +142,14 @@ void Smoother::precalculate_circles()
 // precalculate pixels included when a circle is shifted to the right
 void Smoother::precalculate_shifts()
 {
-  auto maxrad = int(sqrt(double( sqr(_xw)+sqr(_yw) ))) + 1;
+  int maxrad = int(sqrt(double( sqr(_xw)+sqr(_yw) ))) + 1;
   _shift_incl.resize(maxrad);
 
-  for(auto y=-(_yw-1); y<_yw; ++y)
-    for(auto x=-(_xw-1); x<_xw; ++x)
+  for(int y=-(_yw-1); y<_yw; ++y)
+    for(int x=-(_xw-1); x<_xw; ++x)
       {
-        auto r1 = int( sqrt(double(sqr(x) + sqr(y))) );
-        auto r2 = int( sqrt(double(sqr(x+1) + sqr(y))) );
+        int r1 = int( sqrt(double(sqr(x) + sqr(y))) );
+        int r2 = int( sqrt(double(sqr(x+1) + sqr(y))) );
 
         if( r1 < r2 )
           {
@@ -175,7 +175,7 @@ void Smoother::reset_state()
 void Smoother::add_shift(int x, int y, int r, int sign, bool doiny, bool mirror)
 {
   const point_vec& shift(_shift_incl[r]);
-  for(auto i = shift.begin(); i != shift.end(); ++i)
+  for(point_vec::const_iterator i = shift.begin(); i != shift.end(); ++i)
     {
       int dx = i->x;
       int dy = i->y;
@@ -250,13 +250,13 @@ void Smoother::new_pixel(int x, int y)
 
       while(_radius >= 0)
         {
-          auto oldct = _tot_ct;
-          auto oldexpcorr = _tot_expcorr;
-          auto oldpix = _tot_pix;
-          auto oldsn2 = sn2();
+          int oldct = _tot_ct;
+          KahanSum oldexpcorr = _tot_expcorr;
+          int oldpix = _tot_pix;
+          double oldsn2 = sn2();
 
           add_or_remove_circle<-1>(x, y, _radius);
-          auto newsn2 = sn2();
+          double newsn2 = sn2();
 
           if( oldsn2 >= _target_sn2 and newsn2 < _target_sn2 )
             {

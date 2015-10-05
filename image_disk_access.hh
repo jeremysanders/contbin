@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 
+#include "misc.hh"
 #include "fitsio_simple.hh"
 
 template<class T> void load_image(const std::string& filename, double *exposure,

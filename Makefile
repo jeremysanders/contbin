@@ -19,7 +19,8 @@ export CXX=g++
 default: all
 
 programs=contbin accumulate_smooth accumulate_smooth_expmap make_region_files \
-	paint_output_images dumpdata exposure_smooth accumulate_smooth_expcorr
+	paint_output_images dumpdata exposure_smooth accumulate_smooth_expcorr \
+	adaptive_gaussian_smooth
 all: $(programs)
 
 clean:
@@ -29,6 +30,7 @@ install:
 	install $(programs) $(bindir)
 
 exposure_smooth.o: exposure_smooth.cc
+adaptive_gaussian_smooth.o: adaptive_gaussian_smooth.cc
 dumpdata.o: dumpdata.cc
 binner.o: point.hh binner.cc binner.hh misc.hh bin.hh \
 	scrubber.hh terminal.hh
@@ -37,6 +39,11 @@ flux_estimator.o: flux_estimator.cc misc.hh flux_estimator.hh
 bin.o: bin.hh bin.cc
 scrubber.o: scrubber.cc scrubber.hh bin.hh
 terminal.o: terminal.hh terminal.cc
+
+adaptive_gaussian_smooth_objs=adaptive_gaussian_smooth.o fitsio_simple.o memimage.o
+
+adaptive_gaussian_smooth: $(adaptive_gaussian_smooth_objs)  parammm/libparammm.a
+	$(CXX) -o adaptive_gaussian_smooth $(adaptive_gaussian_smooth_objs) $(linkflags)
 
 exposure_smooth_objs=exposure_smooth.o fitsio_simple.o memimage.o
 

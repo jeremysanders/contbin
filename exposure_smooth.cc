@@ -40,80 +40,86 @@ void collectRadii(const int maxrad, point_vec_vec& retn)
   retn.clear();
   retn.resize( int( M_SQRT2*maxrad )+1 );
 
-  for( int x = -maxrad; x <= maxrad; ++x )
-    for( int y = -maxrad; y <= maxrad; ++y )
+  for(int y = -maxrad; y <= maxrad; ++y)
+    for(int x = -maxrad; x <= maxrad; ++x)
       {
-	const size_t r = size_t( sqrt(x*x+y*y) );
+	const unsigned r = unsigned( sqrt(x*x+y*y) );
 	retn[r].push_back( point(x, y) );
       }
 }
 
-// calculate signal to noise ratio given fg and bg counts
-// and exposure times fgtime and bgtime
-double SNratio(double fg, double bg, double fgtime, double bgtime)
+// square value
+template<class T> T sqd(T v)
+{
+  return v*v;
+}
+
+// calculate signal to noise ratio squared given fg and bg counts
+// and exposure times fgtime and bgtime (note inv=1/time)
+float SNratio2(float fg, float bg, float invfgtime, float invbgtime)
 {
   if( fg == 0. and bg == 0. )
     return 0;
 
-  return (fg / fgtime - bg / bgtime) / sqrt( fg / (fgtime*fgtime) +
-					     bg / (bgtime*bgtime) );
-
+  return sqd(fg*invfgtime - bg*invbgtime) /
+    (fg*sqd(invfgtime) + bg*sqd(invbgtime));
 }
 
 // do the actual smoothing
 void smoothImage(const image_float& inimage, const image_float& bgimage,
 		 const image_float& expmapimage,
 		 const image_short& maskimage,
-		 double sn, double exptimefg, double exptimebg,
+		 float sn, float exptimefg, float exptimebg,
 		 image_float& outimage)
 {
   point_vec_vec ptsatradii;
   collectRadii( max(inimage.xw(), inimage.yw()), ptsatradii);
 
+  const float invexptimefg = 1/exptimefg;
+  const float invexptimebg = 1/exptimebg;
+  const float sn2 = sqd(sn);
+
   const int xw = inimage.xw();
   const int yw = inimage.yw();
 
-  for(int y = 0; y < yw; ++y )
-    for(int x = 0; x < xw; ++x )
-      {
-	if( x == 0 and y % (yw/10) == 0 )
-	  {
-	    cout << y / (yw/10) << ' ';
-	    cout.flush();
-	  }
+  for(int y=0; y<yw; ++y)
+    {
+      if(y % (yw/100) == 0)
+        {
+          cout << y / (yw/100) << ' ';
+          cout.flush();
+        }
+      for(int x=0; x<xw; ++x)
+        {
+          if(! maskimage(x, y))
+            continue;
 
-	if( ! maskimage(x, y) )
-	  continue;
+          float totalfg = 0;
+          float totalbg = 0;
+          float totalexp = 0;
 
-	double totalfg = 0.;
-	double totalbg = 0.;
-	double totalexp = 0.;
-	int pixels = 0;
-	
-	for( size_t radius = 0;
-	     SNratio(totalfg, totalbg, exptimefg, exptimebg) < sn;
-	     ++radius )
-	  {
-	    const point_vec& pts = ptsatradii[radius];
-	    for(point_vec::const_iterator p = pts.begin(); p != pts.end(); ++p)
-	      {
-		const int nx = x + p->x;
-		const int ny = y + p->y;
-		
-		if( nx < 0 or ny < 0 or nx >= xw or ny >= yw or !maskimage(nx, ny) )
-		  {
-		    continue;
-		  }		    
+          for( unsigned radius = 0;
+               SNratio2(totalfg, totalbg, invexptimefg, invexptimebg) < sn2;
+               ++radius )
+            {
+              const point_vec& pts = ptsatradii[radius];
+              for(point_vec::const_iterator p = pts.begin(); p != pts.end(); ++p)
+                {
+                  const int nx = x + p->x;
+                  const int ny = y + p->y;
 
-		totalfg += inimage(nx, ny);
-		totalbg += bgimage(nx, ny);
-		totalexp += expmapimage(nx, ny);
-		pixels++;
-	      }
-	  }
+                  if(nx >= 0 && ny >= 0 && nx < xw && ny < yw && maskimage(nx, ny))
+                    {
+                      totalfg += inimage(nx, ny);
+                      totalbg += bgimage(nx, ny);
+                      totalexp += expmapimage(nx, ny);
+                    }
+                }
 
-	outimage(x, y) = (totalfg - totalbg * exptimefg / exptimebg) / totalexp;
-      }
+              outimage(x, y) = (totalfg - totalbg * exptimefg / exptimebg) / totalexp;
+            }
+        }
+    }
 
   cout << '\n';
 }

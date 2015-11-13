@@ -19,6 +19,7 @@
 
 using std::string;
 using std::cout;
+using std::cerr;
 using std::vector;
 using std::sqrt;
 using std::max;
@@ -56,9 +57,9 @@ template<class T> T sqd(T v)
 
 // calculate signal to noise ratio squared given fg and bg counts
 // and exposure times fgtime and bgtime (note inv=1/time)
-float SNratio2(float fg, float bg, float invfgtime, float invbgtime)
+inline float SNratio2(float fg, float bg, float invfgtime, float invbgtime)
 {
-  if( fg == 0. and bg == 0. )
+  if(fg == 0 && bg == 0)
     return 0;
 
   return sqd(fg*invfgtime - bg*invbgtime) /
@@ -68,7 +69,6 @@ float SNratio2(float fg, float bg, float invfgtime, float invbgtime)
 // do the actual smoothing
 void smoothImage(const image_float& inimage, const image_float& bgimage,
 		 const image_float& expmapimage,
-		 const image_short& maskimage,
 		 float sn, float exptimefg, float exptimebg,
 		 image_float& outimage)
 {
@@ -82,16 +82,22 @@ void smoothImage(const image_float& inimage, const image_float& bgimage,
   const int xw = inimage.xw();
   const int yw = inimage.yw();
 
+  // this is an ugly optimisation so that we can avoid calculating the
+  // index repeatedly in the loop below
+  const float* pinimage = &inimage.data()[0];
+  const float* pbgimage = &bgimage.data()[0];
+  const float* pexpimage = &expmapimage.data()[0];
+
   for(int y=0; y<yw; ++y)
     {
-      if(y % (yw/100) == 0)
+      if(y % (yw/10) == 0)
         {
-          cout << y / (yw/100) << ' ';
+          cout << y / (yw/10) << ' ';
           cout.flush();
         }
       for(int x=0; x<xw; ++x)
         {
-          if(! maskimage(x, y))
+          if(expmapimage(x, y) <= 0)
             continue;
 
           float totalfg = 0;
@@ -108,11 +114,17 @@ void smoothImage(const image_float& inimage, const image_float& bgimage,
                   const int nx = x + p->x;
                   const int ny = y + p->y;
 
-                  if(nx >= 0 && ny >= 0 && nx < xw && ny < yw && maskimage(nx, ny))
+                  if(nx >= 0 && ny >= 0 && nx < xw && ny < yw)
                     {
-                      totalfg += inimage(nx, ny);
-                      totalbg += bgimage(nx, ny);
-                      totalexp += expmapimage(nx, ny);
+                      // optimization to precalculate offset into
+                      // image, so we don't do this repeatedly
+                      unsigned offset = nx*xw+ny;
+                      if(pexpimage[offset] > 0)
+                        {
+                          totalfg += pinimage[offset];
+                          totalbg += pbgimage[offset];
+                          totalexp += pexpimage[offset];
+                        }
                     }
                 }
 
@@ -154,10 +166,10 @@ int main(int argc, char* argv[])
 
   params.set_autohelp("Usage: exposure_smooth [OPTIONS] infile.fits\n"
 		      "Accumulative smoothing program with exposure map.\n"
-		      "Copyright Jeremy Sanders 2009",
-		      "Report bugs to <jss@ast.cam.ac.uk>");
+		      "Copyright Jeremy Sanders 2009-2015",
+		      "Report bugs to <jeremy@jeremysanders.net>");
   params.enable_autohelp();
-  params.enable_autoversion("0.1",
+  params.enable_autoversion("0.2",
 			    "Jeremy Sanders",
 			    "Licenced under the GPL - see the file COPYING");
   params.enable_at_expansion();
@@ -207,28 +219,34 @@ int main(int argc, char* argv[])
   if( mask_file.empty() )
     {
       cout << "Using blank mask\n";
-      mask_image = new image_short( in_image->xw(), in_image->yw(), 1 );
-
-      if( ! expmap_file.empty() )
-	{
-	  cout << "Using exposure map to create mask\n";
-	  for(unsigned x = 0; x != in_image->xw(); ++x)
-	    for(unsigned y = 0; y != in_image->yw(); ++y)
-	      if( (*expmap_image)(x, y) < 1. )
-		(*mask_image)(x, y) = 0;
-	}
     }
   else
     {
       load_image( mask_file, 0, &mask_image );
     }
 
+  // check image dimensions
+  if(in_image->xw() != expmap_image->xw() || in_image->yw() != expmap_image->yw() ||
+     (mask_image != 0 && (in_image->xw() != mask_image->xw() ||
+                          in_image->yw() != mask_image->yw())))
+    {
+      cerr << "Input images have different dimensions\n";
+      return 1;
+    }
+
+  // set exposure map to zero where mask is zero
+  if(mask_image != 0)
+    for(unsigned y=0; y<in_image->yw(); ++y)
+      for(unsigned x=0; x<in_image->xw(); ++x)
+        if((*mask_image)(x, y) == 0)
+          (*expmap_image)(x, y) = 0;
+
   // make a new image full of NaNs to use as output
   image_float* out_image = new image_float(in_image->xw(), in_image->yw(),
 					   std::numeric_limits<float>::quiet_NaN());
 
   // actually do the work
-  smoothImage(*in_image, *bg_image, *expmap_image, *mask_image,
+  smoothImage(*in_image, *bg_image, *expmap_image,
 	      sn, in_exposure, bg_exposure, *out_image);
 
   // write output image

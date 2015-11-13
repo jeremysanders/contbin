@@ -57,7 +57,7 @@ template<class T> T sqd(T v)
 
 // calculate signal to noise ratio squared given fg and bg counts
 // and exposure times fgtime and bgtime (note inv=1/time)
-inline float SNratio2(float fg, float bg, float invfgtime, float invbgtime)
+float SNratio2(float fg, float bg, float invfgtime, float invbgtime)
 {
   if(fg == 0 && bg == 0)
     return 0;
@@ -81,12 +81,6 @@ void smoothImage(const image_float& inimage, const image_float& bgimage,
 
   const int xw = inimage.xw();
   const int yw = inimage.yw();
-
-  // this is an ugly optimisation so that we can avoid calculating the
-  // index repeatedly in the loop below
-  const float* pinimage = &inimage.data()[0];
-  const float* pbgimage = &bgimage.data()[0];
-  const float* pexpimage = &expmapimage.data()[0];
 
   for(int y=0; y<yw; ++y)
     {
@@ -116,14 +110,11 @@ void smoothImage(const image_float& inimage, const image_float& bgimage,
 
                   if(nx >= 0 && ny >= 0 && nx < xw && ny < yw)
                     {
-                      // optimization to precalculate offset into
-                      // image, so we don't do this repeatedly
-                      unsigned offset = nx*xw+ny;
-                      if(pexpimage[offset] > 0)
+                      if(expmapimage(nx, ny) > 0)
                         {
-                          totalfg += pinimage[offset];
-                          totalbg += pbgimage[offset];
-                          totalexp += pexpimage[offset];
+                          totalfg += inimage(nx, ny);
+                          totalbg += bgimage(nx, ny);
+                          totalexp += expmapimage(nx, ny);
                         }
                     }
                 }

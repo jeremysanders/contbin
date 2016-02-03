@@ -1,47 +1,50 @@
 Contour binning and accumulative smoothing software
-Version 1.4
+  version 1.6
 ------------------------------------------------------------------------------
 
-Copyright Jeremy Sanders <jss@ast.cam.ac.uk> (2006)
-The reference paper is Sanders (2006), MNRAS, submitted
+Copyright Jeremy Sanders <jeremy@jeremysanders.net> (2002-2016)
+The reference paper is Sanders (2006), MNRAS, 371, 829,
+http://adsabs.harvard.edu/abs/2006MNRAS.371..829S
+
  This software is licensed under the GNU Public License
  See the file included as LICENSE for details
 http://www-xray.ast.cam.ac.uk/~jss/contbin/
 
+Development location and where to file bug reports:
+ https://github.com/jeremysanders/contbin
+
 Changes:
  1.4: 2010-12-07: Fixes to compile on new gcc versions
+ 1.5: Compilation fixes
+ 1.6: Warnings for invalid image sizes and invalid S/N ratios
 
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 How to build the software
 -------------------------
 
-This software has been tested with gcc-3.4.4 under Scientific Linux
-4. It should build under most Unix/Linux systems with GNU gcc (g++),
-with a bit of modification but please let me know if there are
-problems. I've also built it on Solaris 10 with gcc-3.4.3.
-
-A fairly recent version of the GNU c++ compiler, g++, is probably
-required (patches for other c++ compilers welcome). The program
-depends on CFITSIO being on the system library path. The
-LD_LIBRARY_PATH and CPLUS_INCLUDE_PATH can be used on Linux to specify
-the location of the libcfitsio library.
+This software requires a fairly recent gcc C++ compiler (other C++
+compilers haven't been tested) with c++0x support. I've currently
+tested it on gcc-4.6.3. The only other requirement is the CFITSIO
+library.
 
 When unpacked, it should be simply a matter of typing "make" on Linux
-systems. On other systems, things might be slightly more complex (I
-haven't used autoconf). On Solaris the Makefile needs to be edited to
-add -lsocket to the linkflags line. GNU make is required on all
-systems (often called gmake).
+systems. The program depends on CFITSIO being on the system library
+path. If this is not the case, then the Makefile should be edited to
+add the installed include location as -I/directory/path on CXXFLAGS
+and the library location as -L/directory/path at the start of
+linkflags.
 
-5 executables, contbin, accumulate_smooth, make_region_files,
-paint_output_images and accumulate_smooth_expmap should be built.
+Several executables, including contbin, accumulate_smooth,
+make_region_files, paint_output_images and accumulate_smooth_expmap
+should be built.
 
 The files will be copied to "bindir" in the Makefile if "make install"
 is used. This is /usr/local/bin by default. You can copy them by hand
 if preferred.
 
-Please report any problems building or to me at the email address
-jss@ast.cam.ac.uk.
+Please report any problems building to me via preferably the github
+tracker.
 
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
@@ -131,6 +134,14 @@ arguments are as follows:
   Specify exposure map foreground and background images (see the --bg
   option above for details)
 
+--noisemap=FILE
+
+  Normally signal to noise is calculated from the input image and
+  background images, with their respective exposure times. If this
+  option is set, instead this image is used for signal to noise
+  calculations. The noise in a bin is sqrt of the sum of the squares
+  of this input image for the pixels considered.
+
 --sn=VAL
 
   Specify the minimum signal to noise of each bin. This is t_b in the
@@ -178,6 +189,11 @@ arguments are as follows:
   The program bins the image binning using the highest pixel in the
   smoothed map first. This reverses this, binning from the lowest
   pixel first. This is useful if binning using a colour map.
+
+--scrublarge=VAL
+
+  Bins with a fractional area greater than this value are "scrubbed" -
+  i.e. discarded from the output.
 
 --help
 

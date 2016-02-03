@@ -241,6 +241,13 @@ void binner::calc_outputs()
       pixcounts[no] = b.count();
 
       sn[no] = std::sqrt( b.sn_2() );
+
+      if( ! std::isfinite(sn[no]) || sn[no] < 0 )
+        {
+          std::cerr << "WARNING: invalid value in signal to noise. "
+            "This can be caused by a negative input image.\n";
+        }
+
       max_sn = std::max( sn[no], max_sn );
       min_sn = std::min( sn[no], min_sn );
     }

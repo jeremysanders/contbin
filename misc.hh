@@ -35,4 +35,23 @@ inline std::vector<std::string> split_string(const std::string& in, const char d
   return out;
 }
 
+// A simple RIAA pointer class to ensure pointers are deleted at end
+// of scope.  This should be replaced by something standard for C++11.
+template<class T> class delete_ptr
+{
+public:
+  delete_ptr(T* p=0) : _ptr(p) {}
+  ~delete_ptr() { delete _ptr; }
+
+  T& operator*() const { return *_ptr; }
+  T* operator->() const { return _ptr; }
+  void operator=(T* p) { _ptr = p; }  // note this doesn't delete!
+
+  T* ptr() const { return _ptr; }
+  T** pptr() { return &_ptr; }
+
+private:
+  T* _ptr;
+};
+
 #endif

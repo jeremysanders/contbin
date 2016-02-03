@@ -79,7 +79,7 @@ void binner::sort_pixels(const bool bin_down)
   // sort in reverse flux order
   std::sort( _sorted_pixels.begin(), _sorted_pixels.end(),
 	     _flux_sort_points(*_bin_helper.smoothed_image(), bin_down) );
-  
+
   // this is where we are in the list of sorted pixels
   _sorted_pix_posn = _sorted_pixels.begin();
 
@@ -117,7 +117,7 @@ point_int binner::find_next_pixel()
 	  return point_int( p.x(), p.y() );
 	}
 
-      ++ _sorted_pix_posn;	  
+      ++ _sorted_pix_posn;
     }
 
   return point_int(-1, -1);
@@ -266,18 +266,22 @@ void binner::calc_outputs()
     const double delta_signal = (max_signal-min_signal+0.0001)/no_hbins;
     std::vector<unsigned> histo_sn(no_hbins);
     std::vector<unsigned> histo_signal(no_hbins);
-    
+
     for(size_t bin = 0; bin != no_bins; ++bin)
       {
+        if( _bins[bin].bin_no() < 0 )
+          continue;
+
 	const unsigned index_sn = unsigned( (sn[bin]-min_sn) / delta_sn );
 	const unsigned index_signal = unsigned( (signal[bin]-min_signal) /
 						delta_signal );
+
 	assert( index_sn < no_hbins && index_signal < no_hbins );
 
 	++histo_sn[index_sn];
 	++histo_signal[index_signal];
       }
-    
+
     // output histogram data in file
     std::ofstream stream_sn("bin_sn_stats.qdp");
     std::ofstream stream_signal("bin_signal_stats.qdp");

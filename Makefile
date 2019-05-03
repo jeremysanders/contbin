@@ -10,7 +10,7 @@ linkflags=-lcfitsio -Lparammm -lparammm
 bindir=/usr/local/bin
 
 # sensible compiler flags
-export CXXFLAGS=-O2 -g -Wall -std=c++0x
+export CXXFLAGS=-O2 -g -Wall -std=c++11
 export CXX=g++
 
 ##############################################################################
@@ -24,7 +24,7 @@ programs=contbin accumulate_smooth accumulate_smooth_expmap make_region_files \
 all: $(programs)
 
 clean:
-	-rm *.o parammm/*.o parammm/*.a $(programs)
+	-rm -f *.o parammm/*.o parammm/*.a $(programs)
 
 install:
 	install $(programs) $(bindir)

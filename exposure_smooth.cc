@@ -36,17 +36,18 @@ typedef vector<point> point_vec;
 typedef vector<point_vec> point_vec_vec;
 
 // get the points as a function of integer radius
-void collectRadii(const int maxrad, point_vec_vec& retn)
+point_vec_vec collectRadii(const int maxrad)
 {
-  retn.clear();
-  retn.resize( int( M_SQRT2*maxrad )+1 );
+  point_vec_vec retn(maxrad+1);
 
   for(int y = -maxrad; y <= maxrad; ++y)
     for(int x = -maxrad; x <= maxrad; ++x)
       {
-	const unsigned r = unsigned( sqrt(x*x+y*y) );
-	retn[r].push_back( point(x, y) );
+	int r = int( sqrt(x*x+y*y) );
+        if(r<=maxrad)
+          retn[r].push_back( point(x, y) );
       }
+  return retn;
 }
 
 // square value
@@ -69,26 +70,28 @@ float SNratio2(float fg, float bg, float invfgtime, float invbgtime)
 // do the actual smoothing
 void smoothImage(const image_float& inimage, const image_float& bgimage,
 		 const image_float& expmapimage,
-		 float sn, float exptimefg, float exptimebg,
+		 float sn, int maxrad,
+                 float exptimefg, float exptimebg,
 		 image_float& outimage)
 {
-  point_vec_vec ptsatradii;
-  collectRadii( max(inimage.xw(), inimage.yw()), ptsatradii);
+  const int xw = inimage.xw();
+  const int yw = inimage.yw();
+
+  if(maxrad <= 0)
+    // use diagonal of image as maximum radius if not specified
+    maxrad = int(std::sqrt(xw*xw+yw*yw))+1;
+
+  point_vec_vec ptsatradii(collectRadii(maxrad));
 
   const float invexptimefg = 1/exptimefg;
   const float invexptimebg = 1/exptimebg;
   const float sn2 = sqd(sn);
 
-  const int xw = inimage.xw();
-  const int yw = inimage.yw();
-
   for(int y=0; y<yw; ++y)
     {
-      if(y % (yw/10) == 0)
-        {
-          cout << y / (yw/10) << ' ';
-          cout.flush();
-        }
+      if(y%20==0)
+        cout << "y=" << y << '/' << yw << '\n';
+
       for(int x=0; x<xw; ++x)
         {
           if(expmapimage(x, y) <= 0)
@@ -98,29 +101,29 @@ void smoothImage(const image_float& inimage, const image_float& bgimage,
           float totalbg = 0;
           float totalexp = 0;
 
-          for( unsigned radius = 0;
-               SNratio2(totalfg, totalbg, invexptimefg, invexptimebg) < sn2;
+          for(int radius = 0;
+              (SNratio2(totalfg, totalbg, invexptimefg, invexptimebg)<sn2) &&
+                (radius<=maxrad);
                ++radius )
             {
-              const point_vec& pts = ptsatradii[radius];
-              for(point_vec::const_iterator p = pts.begin(); p != pts.end(); ++p)
+              for(auto const& p : ptsatradii[radius])
                 {
-                  const int nx = x + p->x;
-                  const int ny = y + p->y;
+                  const int nx = x + p.x;
+                  const int ny = y + p.y;
 
                   if(nx >= 0 && ny >= 0 && nx < xw && ny < yw)
                     {
-                      if(expmapimage(nx, ny) > 0)
+                      float expos = expmapimage(nx, ny);
+                      if(expos > 0)
                         {
+                          totalexp += expos;
                           totalfg += inimage(nx, ny);
                           totalbg += bgimage(nx, ny);
-                          totalexp += expmapimage(nx, ny);
                         }
                     }
                 }
-
-              outimage(x, y) = (totalfg - totalbg * exptimefg / exptimebg) / totalexp;
             }
+          outimage(x, y) = (totalfg - totalbg * exptimefg / exptimebg) / totalexp;
         }
     }
 
@@ -130,6 +133,7 @@ void smoothImage(const image_float& inimage, const image_float& bgimage,
 int main(int argc, char* argv[])
 {
   double sn = 15;
+  int maxrad = -1;
   string back_file, mask_file, expmap_file;
   string out_file = "expsmooth.fits";
 
@@ -154,13 +158,17 @@ int main(int argc, char* argv[])
 				      parammm::pdouble_opt(&sn),
 				      "set signal:noise threshold (def 15)",
 				      "VAL"));
+  params.add_switch( parammm::pswitch("maxrad", 'r',
+				      parammm::pint_opt(&maxrad),
+				      "maximum radius (def -1 or infinite)",
+				      "VAL"));
 
   params.set_autohelp("Usage: exposure_smooth [OPTIONS] infile.fits\n"
 		      "Accumulative smoothing program with exposure map.\n"
-		      "Copyright Jeremy Sanders 2009-2015",
+		      "Copyright Jeremy Sanders 2009-2018",
 		      "Report bugs to <jeremy@jeremysanders.net>");
   params.enable_autohelp();
-  params.enable_autoversion("0.2",
+  params.enable_autoversion("0.3",
 			    "Jeremy Sanders",
 			    "Licenced under the GPL - see the file COPYING");
   params.enable_at_expansion();
@@ -238,7 +246,7 @@ int main(int argc, char* argv[])
 
   // actually do the work
   smoothImage(*in_image, *bg_image, *expmap_image,
-	      sn, in_exposure, bg_exposure, *out_image);
+	      sn, maxrad, in_exposure, bg_exposure, *out_image);
 
   // write output image
   write_image(out_file, *out_image);

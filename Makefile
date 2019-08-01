@@ -18,8 +18,16 @@ export CXX=g++
 
 default: all
 
-programs=contbin accumulate_smooth accumulate_smooth_expmap make_region_files \
-	paint_output_images dumpdata exposure_smooth accumulate_smooth_expcorr \
+programs= \
+	contbin \
+	accumulate_smooth \
+	accumulate_smooth_expmap \
+	make_region_files \
+	make_region_files_polygon \
+	paint_output_images \
+	dumpdata \
+	exposure_smooth \
+	accumulate_smooth_expcorr \
 	adaptive_gaussian_smooth
 all: $(programs)
 
@@ -84,6 +92,13 @@ make_region_files_objs=make_region_files.o \
 
 make_region_files: $(make_region_files_objs) parammm/libparammm.a
 	$(CXX) -o make_region_files $(make_region_files_objs) \
+		$(linkflags)
+
+make_region_files_polygon_objs=make_region_files_polygon.o \
+        fitsio_simple.o memimage.o
+
+make_region_files_polygon: $(make_region_files_polygon_objs) parammm/libparammm.a
+	$(CXX) -o make_region_files_polygon $(make_region_files_polygon_objs) \
 		$(linkflags)
 
 paint_output_images_objs=paint_output_images.o \

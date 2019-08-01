@@ -242,7 +242,7 @@ int main(int argc, char* argv[])
   params.set_autohelp("Usage: accumulate_smooth_expmap [OPTIONS] expcorrect.fits expmap.fits\n"
 		      "Accumulate smoothing program (exposure map).\n"
 		      "Written by Jeremy Sanders 2004.",
-		      "Report bugs to <jss@ast.cam.ac.uk>");
+		      "Report bugs to <jeremy@jeremysanders.net>");
   params.enable_autohelp();
   params.enable_autoversion("0.1",
 			    "Jeremy Sanders",

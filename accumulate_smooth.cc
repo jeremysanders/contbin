@@ -39,7 +39,7 @@ int main(int argc, char* argv[])
   params.set_autohelp("Usage: accumulate_smooth [OPTIONS] file.fits\n"
 		      "Accumulate smoothing program.\n"
 		      "Written by Jeremy Sanders 2004.",
-		      "Report bugs to <jss@ast.cam.ac.uk>");
+		      "Report bugs to <jeremy@jeremysanders.net>");
   params.enable_autohelp();
   params.enable_autoversion("0.1",
 			    "Jeremy Sanders",

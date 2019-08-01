@@ -171,12 +171,12 @@ int main(int argc, char *argv[])
 {
   parammm::param params(argc, argv);
 
-  params.set_autohelp("Usage: xaf_make_region_files [OPTION] "
+  params.set_autohelp("Usage: make_region_files [OPTION] "
 		      "--minx=val --miny=val --bin=val "
 		      "--outdir=dir/ binmap.fits\n"
 		      "Create region files from binmap.\n"
 		      "Written by Jeremy Sanders, 2002.",
-		      "Report bugs to <jss@ast.cam.ac.uk>");
+		      "Report bugs to <jeremy@jeremysanders.net>");
 
   double minx = 0, miny = 0, bin = 1;
   string outdir = ".";

@@ -1,7 +1,7 @@
 // program takes output files from xaf_fit_spectra
 // and creates output images
 
-// Copyright (C) 2002-2006 Jeremy Sanders <jss@ast.cam.ac.uk>
+// Copyright (C) 2002-2006 Jeremy Sanders <jeremy@jeremysanders.net>
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License VERSION 2 as
@@ -116,7 +116,7 @@ painter::painter(int argc, char **argv)
   params.set_autohelp("Usage: paint_output_images [OPTION]\n"
 		      "Make FITS images from fit results\n"
 		      "Written by Jeremy Sanders, 2002-2006.",
-		      "Report bugs to <jss@ast.cam.ac.uk>");
+		      "Report bugs to <jeremy@jeremysanders.net>");
   params.enable_autohelp();
   params.enable_autoversion(c_prog_version, "Jeremy Sanders",
 			    "Released under the GPL");

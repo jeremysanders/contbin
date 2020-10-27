@@ -254,6 +254,29 @@ accumulate_smooth_expmap --sn=20 expcorrect.fits expmap.fits
 
 Optional arguments are --mask, --out and --sn as above.
 
+Accumulative smoothing (for counts)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+accumulative_counts measures the size (scale) of a top hat kernel
+containing a certain signal to noise ratio (square root of number of
+counts), writing to a scale file. The scale file can then be applied
+to the same or other data to use the same smoothing kernel. When
+applying either a top-hat or a Gaussian smoothing can be used.
+
+To make the scale file:
+
+accumulate_counts --sn=30 --mask=mask.fits --scale scale.fits input.fits
+
+To apply the scale file (add --gaussian for Gaussian scaling):
+
+accumulate_counts --apply --scale scale.fits --applied out.fits input.fits
+
+Note that the mask file should contain integer pixels containing
+positive values for valid regions. 0 pixels are invalid regions. A
+special value of -2 in the mask file indicates regions (e.g. point
+sources) which should be replaced by smoothed counts from neighbouring
+regions. This special value allows point sources to be removed from
+output images.
+
 
 Making region files
 ^^^^^^^^^^^^^^^^^^^

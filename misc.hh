@@ -11,6 +11,7 @@ typedef dm::memimage<double> image_dbl;
 typedef dm::memimage<float> image_float;
 typedef dm::memimage<long> image_long;
 typedef dm::memimage<short> image_short;
+typedef dm::memimage<bool> image_bool;
 
 typedef std::vector<unsigned> vec_unsigned;
 typedef std::vector<double> vec_dbl;

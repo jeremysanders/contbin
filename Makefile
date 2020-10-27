@@ -23,11 +23,11 @@ programs= \
 	accumulate_smooth \
 	accumulate_smooth_expmap \
 	make_region_files \
-	make_region_files_polygon \
 	paint_output_images \
 	dumpdata \
 	exposure_smooth \
 	accumulate_smooth_expcorr \
+	accumulate_counts \
 	adaptive_gaussian_smooth
 all: $(programs)
 
@@ -37,6 +37,7 @@ clean:
 install:
 	install $(programs) $(bindir)
 
+accumulate_counts.o: accumulate_counts.cc
 exposure_smooth.o: exposure_smooth.cc
 adaptive_gaussian_smooth.o: adaptive_gaussian_smooth.cc
 dumpdata.o: dumpdata.cc
@@ -47,6 +48,11 @@ flux_estimator.o: flux_estimator.cc misc.hh flux_estimator.hh
 bin.o: bin.hh bin.cc
 scrubber.o: scrubber.cc scrubber.hh bin.hh
 terminal.o: terminal.hh terminal.cc
+
+accumulate_counts_objs=accumulate_counts.o fitsio_simple.o memimage.o
+accumulate_counts: $(accumulate_counts_objs)  parammm/libparammm.a
+	$(CXX) -o accumulate_counts $(accumulate_counts_objs) $(linkflags)
+
 
 adaptive_gaussian_smooth_objs=adaptive_gaussian_smooth.o fitsio_simple.o memimage.o
 

@@ -23,7 +23,7 @@ template<class T> void load_image(const std::string& filename, double *exposure,
     }
 }
 
-void write_image(const std::string& filename, const image_float& img)
+template<class T> void write_image(const std::string& filename, const T& img)
 {
   std::cout << "(i) Writing " << filename << '\n';
 

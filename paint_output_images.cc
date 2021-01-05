@@ -1,7 +1,7 @@
 // program takes output files from xaf_fit_spectra
 // and creates output images
 
-// Copyright (C) 2002-2006 Jeremy Sanders <jeremy@jeremysanders.net>
+// Copyright (C) 2002-2021 Jeremy Sanders <jeremy@jeremysanders.net>
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License VERSION 2 as
@@ -78,6 +78,8 @@ private:
   string m_binmap_filename;
   string m_input_dir;
   string m_output_dir;
+  string m_region_list;
+  string m_out_suffix;
   bool m_gzip;
 
   AllDataMap m_output_data;
@@ -88,6 +90,8 @@ painter::painter(int argc, char **argv)
   : m_binmap_filename("binmap.fits"),
     m_input_dir("."),
     m_output_dir("."),
+    m_region_list("region_list.txt"),
+    m_out_suffix("_out.fits"),
     m_gzip(false)
 {
 
@@ -112,10 +116,18 @@ painter::painter(int argc, char **argv)
 				      parammm::pbool_noopt(&m_gzip),
 				      "Gzip output files",
 				      ""));
+  params.add_switch( parammm::pswitch("region_list", 'l',
+                                      parammm::pstring_opt(&m_region_list),
+                                      "Region list file (default region_list.txt)",
+                                      "FILE") );
+  params.add_switch( parammm::pswitch("out_suffix", 's',
+                                      parammm::pstring_opt(&m_out_suffix),
+                                      "Output suffix (default _out.fits)",
+                                      "SUFFIX") );
 
   params.set_autohelp("Usage: paint_output_images [OPTION]\n"
 		      "Make FITS images from fit results\n"
-		      "Written by Jeremy Sanders, 2002-2006.",
+		      "Written by Jeremy Sanders, 2002-2021.",
 		      "Report bugs to <jeremy@jeremysanders.net>");
   params.enable_autohelp();
   params.enable_autoversion(c_prog_version, "Jeremy Sanders",
@@ -203,9 +215,11 @@ void painter::paint_variables()
 	  }
 
       // write output image
-      Util::FormatString filename("%1/%2_out.fits%3");
-      filename << m_output_dir << ends << param->first << ends;
-      filename << (m_gzip ? ".gz" : "") << ends;
+      Util::FormatString filename("%1/%2%3%4");
+      filename << m_output_dir << ends
+               << param->first << ends
+               << m_out_suffix << ends
+               << (m_gzip ? ".gz" : "") << ends;
 
       FITSFile file(filename.get(), FITSFile::Create);
       file.writeImage(im);
@@ -266,8 +280,8 @@ int get_number(const string& s)
 
 void painter::read_bin_list()
 {
-  Util::FormatString filename("%1/region_list.txt");
-  filename << m_input_dir << ends;
+  Util::FormatString filename("%1/%2");
+  filename << m_input_dir << ends << m_region_list << ends;
 
   ifstream infile(filename.get().c_str());
 

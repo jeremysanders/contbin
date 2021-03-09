@@ -4,7 +4,7 @@
 
 # add -lsocket to below for Solaris
 # add -Ldirname to add directory to link path to look for cfitsio
-linkflags=-lcfitsio -Lparammm -lparammm
+linkflags=-lcfitsio -Lparammm -lparammm -lpthread
 
 # where to install (not very well tested)
 bindir=/usr/local/bin

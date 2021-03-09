@@ -8,6 +8,8 @@
 #include <cmath>
 #include <limits>
 #include <algorithm>
+#include <thread>
+#include <mutex>
 
 #include "parammm/parammm.hh"
 #include "misc.hh"
@@ -136,16 +138,28 @@ inline float quick_exp(const std::vector<float>& cache, float val)
   return (fidx-iidx)*cache[iidx+1] + (1+iidx-fidx)*cache[iidx];
 }
 
-void apply_scale_gaussian(const image_float& inimg, const image_short& maskimg,
-                          const image_short& scaleimg, image_float& outimg)
+void apply_scale_gaussian_thread(const image_float& inimg, const image_short& maskimg,
+                                 const image_short& scaleimg, image_float& outimg,
+                                 const std::vector<float>& expcache,
+                                 std::vector<unsigned>& rows)
 {
-  std::vector<float> expcache;
-  make_exp_cache(expcache);
+  static std::mutex mut;
 
-  for(unsigned y=0; y<inimg.yw(); ++y)
+  for(;;)
     {
+      // only access rows from one thread at a time
+      unsigned y;
+      {
+        std::lock_guard<std::mutex> lock(mut);
+        if( rows.empty() )
+          break;
+        y = rows.back();
+        rows.pop_back();
+      }
+
       if(y%10 == 0)
         std::cout << y << '\n';
+
       for(unsigned x=0; x<inimg.xw(); ++x)
         {
           if((maskimg(x,y)<1 && maskimg(x,y)!=-2) || scaleimg(x,y)<0)
@@ -176,7 +190,33 @@ void apply_scale_gaussian(const image_float& inimg, const image_short& maskimg,
           outimg(x,y) = sum / sum_weights;
         }
     }
+}
 
+void apply_scale_gaussian(const image_float& inimg, const image_short& maskimg,
+                          const image_short& scaleimg, image_float& outimg,
+                          int nthreads)
+{
+  std::vector<float> expcache;
+  make_exp_cache(expcache);
+
+  // make list of rows, in reverse order
+  std::vector<unsigned> rows;
+  for(int y=int(inimg.yw())-1; y >= 0; --y)
+    rows.push_back(unsigned(y));
+
+  // make threads
+  std::vector<std::thread> threads;
+  for(int i=0; i<nthreads; i++)
+    {
+      threads.push_back(std::thread(apply_scale_gaussian_thread,
+                                    std::cref(inimg), std::cref(maskimg),
+                                    std::cref(scaleimg), std::ref(outimg),
+                                    std::cref(expcache), std::ref(rows)));
+    }
+
+  // now wait for them
+  for(auto& t : threads)
+    t.join();
 }
 
 int main(int argc, char* argv[])
@@ -185,6 +225,7 @@ int main(int argc, char* argv[])
   string scale_file = "acscale.fits";
   string app_file = "applied.fits";
   double sn = 15;
+  int threads = 1;
   bool apply_mode = false;
   bool apply_gaussian = false;
 
@@ -212,6 +253,10 @@ int main(int argc, char* argv[])
   params.add_switch( parammm::pswitch("sn", 's',
 				      parammm::pdouble_opt(&sn),
 				      "set signal:noise threshold (def 15)",
+				      "VAL"));
+  params.add_switch( parammm::pswitch("threads", 't',
+				      parammm::pint_opt(&threads),
+				      "set number of threads (default 1)",
 				      "VAL"));
   params.set_autohelp("Usage: accumulate_counts [OPTIONS] file.fits\n"
 		      "Measure smoothing scale from count data, to be applied later to other data.\n"
@@ -261,7 +306,7 @@ int main(int argc, char* argv[])
       load_image( scale_file, 0, &scale_img );
 
       if(apply_gaussian)
-        apply_scale_gaussian(*in_image, *mask_image, *scale_img, *out_img);
+        apply_scale_gaussian(*in_image, *mask_image, *scale_img, *out_img, threads);
       else
         apply_scale(*in_image, *mask_image, *scale_img, *out_img);
 

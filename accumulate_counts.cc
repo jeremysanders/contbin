@@ -1,5 +1,5 @@
 // accumulate smoothing
-// Jeremy Sanders 2002-2005
+// Jeremy Sanders 2002-2021
 // Released under the GNU Public License
 
 #include <iostream>
@@ -46,17 +46,29 @@ PointVecVec cachePVV()
   return pvv;
 }
 
-void construct_scale(const image_float& inimg, const image_short& maskimg, double sn,
-                     image_short& scaleimg)
+void construct_scale_thread(const image_float& inimg, const image_short& maskimg, double sn,
+                            image_short& scaleimg,
+                            const PointVecVec& pvv,
+                            std::vector<unsigned>& rows)
 {
-  const PointVecVec pvv(cachePVV());
+  static std::mutex mut;
   const double maxcts = sn*sn;
 
-  // now iterate over each pixel and measure binning scale
-  for(unsigned y=0; y<inimg.yw(); ++y)
+  for(;;)
     {
-      if(y%100 == 0)
+      // only access rows from one thread at a time
+      unsigned y;
+      {
+        std::lock_guard<std::mutex> lock(mut);
+        if( rows.empty() )
+          break;
+        y = rows.back();
+        rows.pop_back();
+      }
+
+      if(y%10 == 0)
         std::cout << y << '\n';
+
       for(unsigned x=0; x<inimg.xw(); ++x)
         {
           if(maskimg(x,y) < 1 && maskimg(x,y) != -2)
@@ -81,6 +93,31 @@ void construct_scale(const image_float& inimg, const image_short& maskimg, doubl
           scaleimg(x,y) = r2;
         }
     }
+}
+
+void construct_scale(const image_float& inimg, const image_short& maskimg, double sn,
+                     image_short& scaleimg, int nthreads)
+{
+  const PointVecVec pvv(cachePVV());
+
+  // make list of rows, in reverse order
+  std::vector<unsigned> rows;
+  for(int y=int(inimg.yw())-1; y >= 0; --y)
+    rows.push_back(unsigned(y));
+
+  // make threads
+  std::vector<std::thread> threads;
+  for(int i=0; i<nthreads; i++)
+    {
+      threads.push_back(std::thread(construct_scale_thread,
+                                    std::cref(inimg), std::cref(maskimg),
+                                    sn, std::ref(scaleimg),
+                                    std::cref(pvv), std::ref(rows)));
+    }
+
+  // now wait for them
+  for(auto& t : threads)
+    t.join();
 }
 
 void apply_scale(const image_float& inimg, const image_short& maskimg,
@@ -293,7 +330,7 @@ int main(int argc, char* argv[])
     {
       image_short* scale_img = new image_short(in_image->xw(), in_image->yw(), -1);
 
-      construct_scale(*in_image, *mask_image, sn, *scale_img);
+      construct_scale(*in_image, *mask_image, sn, *scale_img, threads);
 
       write_image(scale_file, *scale_img);
     }

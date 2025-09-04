@@ -1,7 +1,7 @@
 // Contour binning program
-// See Sanders (2005)
+// See Sanders (2006)
 
-// Copyright 2002-2005 Jeremy Sanders
+// Copyright 2002-2025 Jeremy Sanders
 // Released under the GNU Public Licence (GPL)
 
 #include <iostream>
@@ -21,7 +21,7 @@
 #include "fitsio_simple.hh"
 #include "misc.hh"
 
-const char* const CONTBIN_VERSION = "1.6";
+const char* const CONTBIN_VERSION = "1.7";
 
 using std::string;
 using std::vector;
@@ -152,7 +152,7 @@ program::program(int argc, char **argv)
 
   params.set_autohelp("Usage: contbin [OPTIONS] file.fits\n"
 		      "Contour binning program\n"
-		      "Written by Jeremy Sanders 2002-2016",
+		      "Written by Jeremy Sanders 2002-2025",
 		      "Report bugs to <jeremy@jeremysanders.net>");
   params.enable_autohelp();
   params.enable_autoversion(CONTBIN_VERSION,

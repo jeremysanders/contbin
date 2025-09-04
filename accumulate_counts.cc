@@ -1,6 +1,7 @@
-// accumulate smoothing
-// Jeremy Sanders 2002-2021
-// Released under the GNU Public License
+// accumulative smoothing, using counts
+
+// Jeremy Sanders 2002-2025
+// Released under the GNU Public License v2 or later
 
 #include <iostream>
 #include <string>

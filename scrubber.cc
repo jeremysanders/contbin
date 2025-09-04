@@ -35,23 +35,23 @@ void scrubber::find_best_neighbour(bin* thebin, bool allow_unconstrained,
   const long binno = thebin->bin_no();
 
   double bestdelta = 1e99;
-  
-  bin::_Pt_container* const edgepoints = & thebin->get_edge_points();   
-  bin::_Pt_container::iterator pt = edgepoints->begin();
 
-  while( pt != edgepoints->end() )
+  bin::_Pt_container& edgepoints = thebin->get_edge_points();
+
+  size_t pt = 0;
+  while( pt < edgepoints.size() )
     {
-      const int x = pt->x();
-      const int y = pt->y();
+      const int x = edgepoints[pt].x();
+      const int y = edgepoints[pt].y();
       const double v = smoothed_image(x, y);
-      
+
       // loop over neighbours of edge point
       bool anyneighbours = false;
       for( size_t n = 0; n != bin_no_neigh; ++n )
 	{
 	  const int xp = x + bin_neigh_x[n];
 	  const int yp = y + bin_neigh_y[n];
-	  
+
 	  // select pixels in neighbouring bins
 	  if( xp >= 0 && yp >= 0 && xp < int(_xw) && yp < int(_yw) )
 	    {
@@ -66,7 +66,7 @@ void scrubber::find_best_neighbour(bin* thebin, bool allow_unconstrained,
 		      ! allow_unconstrained &&
 		      ! _bins[nbin].check_constraint(xp, yp) )
 		    continue;
-		  
+
 		  const double delta = fabs( v - smoothed_image(xp, yp) );
 		  if( delta < bestdelta )
 		    {
@@ -78,12 +78,12 @@ void scrubber::find_best_neighbour(bin* thebin, bool allow_unconstrained,
 		} // valid neighbour
 	    } // in image range
 	} // loop over neighbours
-      
+
       // remove edge pixels without any neighbours
       if( ! anyneighbours )
-	pt = edgepoints->erase( pt );
+        edgepoints.erase(edgepoints.begin() + pt);
       else
-	pt++;
+	++pt;
     }
 
 }
@@ -114,7 +114,7 @@ void scrubber::dissolve_bin( bin* thebin )
 	  _cannot_dissolve[ binno ] = true;
 	  return;
 	}
-  
+
       // reassign pixel
       thebin->remove_point(bestx, besty);
       _bins[ bestbin ].add_point(bestx, besty);
@@ -140,7 +140,7 @@ void scrubber::scrub()
   for( ;; )
     {
       double lowest_SN_2 = 1e99;
-      
+
       // iterate over bins, find those with the lowest S/N
 
       BPV::iterator i = bin_ptrs.begin();

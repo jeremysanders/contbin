@@ -63,7 +63,7 @@ void bin_helper::precalculate_annuli()
           const unsigned r = unsigned_radius(x, y);
 
           // add pixel to appropriate radius
-          _annuli_points[r].push_back( point_int(x, y) );
+          _annuli_points[r].emplace_back(x, y);
         }
     }
 }
@@ -175,7 +175,7 @@ void bin::remove_point( const int x, const int y )
 	  if( std::find( _edge_points.begin(), _edge_points.end(),
 			 point_int(xp, yp) ) == _edge_points.end() )
 	    {
-	      _edge_points.push_back( point_int(xp, yp) );
+	      _edge_points.emplace_back(xp, yp);
 	    }
 	}
     } // loop over neighbours
@@ -183,7 +183,9 @@ void bin::remove_point( const int x, const int y )
 
 void bin::add_point(const int x, const int y)
 {
-  _all_points.push_back( point_int(x, y) );
+  point_int pt(x, y);
+
+  _all_points.push_back(pt);
 
   double signal = (*_helper->in_image())(x, y);
   _fg_sum += signal;
@@ -216,10 +218,10 @@ void bin::add_point(const int x, const int y)
   }
 
   // put into edge (it might not be, but it will get flushed out)
-  if( std::find( _edge_points.begin(), _edge_points.end(),
-		 point_int(x, y) ) == _edge_points.end() )
+  if( std::find(_edge_points.begin(), _edge_points.end(), pt) ==
+      _edge_points.end() )
     {
-      _edge_points.push_back( point_int(x, y) );
+      _edge_points.push_back(pt);
     }
 }
 
@@ -255,12 +257,12 @@ bool bin::add_next_pixel()
 
   // iterate over the proper edge points
   //const bool toolarge = calc_length_ratio() > constrain_val;
-  _Pt_container::iterator pix = _edge_points.begin();
-  while( pix != _edge_points.end() )
+  size_t pix = 0;
+  while( pix < _edge_points.size() )
     {
       // where the pixel is
-      const int x = pix->x();
-      const int y = pix->y();
+      const int x = _edge_points[pix].x();
+      const int y = _edge_points[pix].y();
 
       // check whether point is edge
       bool is_edge = false;
@@ -297,9 +299,9 @@ bool bin::add_next_pixel()
 
       // go to next point (removing current point if not edge)
       if( is_edge )
-	pix++;
+	++pix;
       else
-	pix = _edge_points.erase(pix);
+        _edge_points.erase(_edge_points.begin() + pix);
 
     } // loop over edge pixels in bin
 

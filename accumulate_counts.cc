@@ -193,10 +193,10 @@ void apply_scale_gaussian_thread(const image_float& inimg, const image_short& ma
           break;
         y = rows.back();
         rows.pop_back();
-      }
 
-      if(y%10 == 0)
-        std::cout << y << '\n';
+        if(y%20 == 0)
+          std::cout << y << '\n';
+      }
 
       for(unsigned x=0; x<inimg.xw(); ++x)
         {
@@ -214,10 +214,10 @@ void apply_scale_gaussian_thread(const image_float& inimg, const image_short& ma
               {
                 int nx = x+dx;
                 int ny = y+dy;
+                int rad2 = dx*dx + dy*dy;
                 if( nx>=0 && ny>=0 && nx<int(inimg.xw()) && ny<int(inimg.yw()) &&
-                    maskimg(nx,ny)>0 )
+                    maskimg(nx,ny)>0 && rad2<=rng*rng )
                   {
-                    int rad2 = dx*dx+dy*dy;
                     //float weight = std::exp(nh_invsigma2*rad2);
                     float weight = quick_exp(expcache, nh_invsigma2*rad2);
                     sum_weights += weight;

@@ -18,6 +18,7 @@
 
 using std::string;
 using std::cout;
+using std::sqrt;
 
 struct Point
 {
@@ -28,10 +29,10 @@ struct Point
 typedef std::vector<Point> PointVec;
 typedef std::vector<PointVec> PointVecVec;
 
-PointVecVec cachePVV()
+PointVecVec cachePVV(int xw, int yw)
 {
   // cache delta x, y for each r-squared
-  const int maxrad = 100;
+  const int maxrad = int(sqrt(xw*yw));
   PointVecVec pvv;
   for(int y=-maxrad; y<=maxrad; ++y)
     for(int x=-maxrad; x<=maxrad; ++x)
@@ -47,13 +48,14 @@ PointVecVec cachePVV()
   return pvv;
 }
 
-void construct_scale_thread(const image_float& inimg, const image_short& maskimg, double sn,
-                            image_short& scaleimg,
+void construct_scale_thread(const image_float& inimg, const image_short& maskimg,
+                            const image_float* bkgimg,
+                            double minsn,
+                            image_long& scaleimg,
                             const PointVecVec& pvv,
                             std::vector<unsigned>& rows)
 {
   static std::mutex mut;
-  const double maxcts = sn*sn;
 
   for(;;)
     {
@@ -76,30 +78,37 @@ void construct_scale_thread(const image_float& inimg, const image_short& maskimg
             continue;
 
           double sum = 0;
-          unsigned r2 = 0;
-          while( r2 < pvv.size() )
+          double sum_bg = 0;
+          size_t r2;
+          for(r2=0; r2<pvv.size(); ++r2)
             {
               for(auto pt : pvv[r2])
                 {
                   int xi = int(x)+pt.x;
                   int yi = int(y)+pt.y;
                   if(xi>=0 && yi>=0 && xi<int(inimg.xw()) && yi<int(inimg.yw()) && maskimg(xi,yi)>0)
-                    sum += double(inimg(xi,yi));
+                    {
+                      sum += double(inimg(xi,yi));
+                      if(bkgimg != nullptr)
+                        sum_bg += double((*bkgimg)(xi,yi));
+                    }
                 }
-              if(sum >= maxcts)
+              double sn = (bkgimg==nullptr) ? sqrt(sum) : (sum-sum_bg) / sqrt(sum);
+              if(sn >= minsn)
                 break;
-              r2 += 1;
             }
 
-          scaleimg(x,y) = r2;
+          scaleimg(x,y) = long( std::min(pvv.size()-1, r2) );
         }
     }
 }
 
-void construct_scale(const image_float& inimg, const image_short& maskimg, double sn,
-                     image_short& scaleimg, int nthreads)
+void construct_scale(const image_float& inimg, const image_short& maskimg,
+                     const image_float* bkgimg,
+                     double sn,
+                     image_long& scaleimg, int nthreads)
 {
-  const PointVecVec pvv(cachePVV());
+  const PointVecVec pvv(cachePVV(inimg.xw(), inimg.yw()));
 
   // make list of rows, in reverse order
   std::vector<unsigned> rows;
@@ -112,6 +121,7 @@ void construct_scale(const image_float& inimg, const image_short& maskimg, doubl
     {
       threads.push_back(std::thread(construct_scale_thread,
                                     std::cref(inimg), std::cref(maskimg),
+                                    bkgimg,
                                     sn, std::ref(scaleimg),
                                     std::cref(pvv), std::ref(rows)));
     }
@@ -121,15 +131,30 @@ void construct_scale(const image_float& inimg, const image_short& maskimg, doubl
     t.join();
 }
 
-void apply_scale(const image_float& inimg, const image_short& maskimg,
-                 const image_short& scaleimg, image_float& outimg)
-{
-  const PointVecVec pvv(cachePVV());
 
-  for(unsigned y=0; y<inimg.yw(); ++y)
+void apply_scale_thread(const image_float& inimg, const image_short& maskimg,
+                        const image_long& scaleimg,
+                        image_float& outimg,
+                        const PointVecVec& pvv,
+                        std::vector<unsigned>& rows)
+{
+  static std::mutex mut;
+
+  for(;;)
     {
-      if(y%100 == 0)
-        std::cout << y << '\n';
+      // only access rows from one thread at a time
+      unsigned y;
+      {
+        std::lock_guard<std::mutex> lock(mut);
+        if( rows.empty() )
+          break;
+        y = rows.back();
+        rows.pop_back();
+
+        if(y%20 == 0)
+          std::cout << y << '\n';
+      }
+
       for(unsigned x=0; x<inimg.xw(); ++x)
         {
           if(maskimg(x,y) < 1 && maskimg(x,y) != -2)
@@ -155,6 +180,32 @@ void apply_scale(const image_float& inimg, const image_short& maskimg,
     }
 }
 
+void apply_scale(const image_float& inimg, const image_short& maskimg,
+                 const image_long& scaleimg, image_float& outimg,
+                 int nthreads)
+{
+  const PointVecVec pvv(cachePVV(inimg.xw(), inimg.yw()));
+
+  // make list of rows, in reverse order
+  std::vector<unsigned> rows;
+  for(int y=int(inimg.yw())-1; y >= 0; --y)
+    rows.push_back(unsigned(y));
+
+  // make threads
+  std::vector<std::thread> threads;
+  for(int i=0; i<nthreads; i++)
+    {
+      threads.push_back(std::thread(apply_scale_thread,
+                                    std::cref(inimg), std::cref(maskimg),
+                                    std::cref(scaleimg), std::ref(outimg),
+                                    std::cref(pvv), std::ref(rows)));
+    }
+
+  // now wait for them
+  for(auto& t : threads)
+    t.join();
+}
+
 #define MAXEXP 12.0
 #define EXPNSTEPS 1024
 #define STEPSIZE (MAXEXP/EXPNSTEPS)
@@ -177,7 +228,7 @@ inline float quick_exp(const std::vector<float>& cache, float val)
 }
 
 void apply_scale_gaussian_thread(const image_float& inimg, const image_short& maskimg,
-                                 const image_short& scaleimg, image_float& outimg,
+                                 const image_long& scaleimg, image_float& outimg,
                                  const std::vector<float>& expcache,
                                  std::vector<unsigned>& rows)
 {
@@ -231,7 +282,7 @@ void apply_scale_gaussian_thread(const image_float& inimg, const image_short& ma
 }
 
 void apply_scale_gaussian(const image_float& inimg, const image_short& maskimg,
-                          const image_short& scaleimg, image_float& outimg,
+                          const image_long& scaleimg, image_float& outimg,
                           int nthreads)
 {
   std::vector<float> expcache;
@@ -259,7 +310,7 @@ void apply_scale_gaussian(const image_float& inimg, const image_short& maskimg,
 
 int main(int argc, char* argv[])
 {
-  string back_file, mask_file;
+  string bkg_file, mask_file;
   string scale_file = "acscale.fits";
   string app_file = "applied.fits";
   double sn = 15;
@@ -278,8 +329,12 @@ int main(int argc, char* argv[])
                                        ""));
   params.add_switch( parammm::pswitch( "mask", 'm',
 				       parammm::pstring_opt(&mask_file),
-				       "set mask file",
+				       "set mask file (optional)",
 				       "FILE"));
+  params.add_switch( parammm::pswitch( "bkg", 'b',
+                                       parammm::pstring_opt(&bkg_file),
+                                       "set background file (optional)",
+                                       "FILE"));
   params.add_switch( parammm::pswitch( "applied", 'a',
 				       parammm::pstring_opt(&app_file),
 				       "set output file (def out.fits)",
@@ -315,7 +370,7 @@ int main(int argc, char* argv[])
   const string filename = params.args()[0];
   image_float* in_image;
 
-  load_image( filename, 0, &in_image);
+  load_image( filename, nullptr, &in_image);
 
   image_short* mask_image;
   if( mask_file.empty() )
@@ -324,14 +379,20 @@ int main(int argc, char* argv[])
     }
   else
     {
-      load_image( mask_file, 0, &mask_image );
+      load_image( mask_file, nullptr, &mask_image );
+    }
+
+  image_float* bkg_image = nullptr;
+  if( ! bkg_file.empty() )
+    {
+      load_image( bkg_file, nullptr, &bkg_image );
     }
 
   if( ! apply_mode )
     {
-      image_short* scale_img = new image_short(in_image->xw(), in_image->yw(), -1);
+      image_long* scale_img = new image_long(in_image->xw(), in_image->yw(), -1);
 
-      construct_scale(*in_image, *mask_image, sn, *scale_img, threads);
+      construct_scale(*in_image, *mask_image, bkg_image, sn, *scale_img, threads);
 
       write_image(scale_file, *scale_img);
     }
@@ -339,14 +400,14 @@ int main(int argc, char* argv[])
     {
       image_float* out_img = new image_float(in_image->xw(), in_image->yw(),
                                              std::numeric_limits<float>::quiet_NaN());
-      image_short* scale_img;
+      image_long* scale_img;
 
-      load_image( scale_file, 0, &scale_img );
+      load_image( scale_file, nullptr, &scale_img );
 
       if(apply_gaussian)
         apply_scale_gaussian(*in_image, *mask_image, *scale_img, *out_img, threads);
       else
-        apply_scale(*in_image, *mask_image, *scale_img, *out_img);
+        apply_scale(*in_image, *mask_image, *scale_img, *out_img, threads);
 
       write_image(app_file, *out_img);
     }

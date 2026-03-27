@@ -88,6 +88,52 @@ void scrubber::find_best_neighbour(bin* thebin, bool allow_unconstrained,
 
 }
 
+void scrubber::force_dissolve( bin* thebin )
+{
+  const image_float& smoothed_image = *_helper.smoothed_image();
+  const image_long& bins_image = * _helper.bins_image();
+  auto& points = thebin->get_all_points();
+
+  while( ! points.empty() )
+    {
+      const point_int pt = points.back();
+      const double v = smoothed_image(pt.x(), pt.y());
+
+      // with increasing radius, look for a new bin which is closest
+      // to the smoothed image
+      int bestbin = -1;
+      double bestdelta = 1e99;
+      for(unsigned rad=0; bestbin<0; ++rad)
+        for(const auto& ipt : _helper.points_at_annuli(rad))
+          {
+            const int x2 = pt.x() + ipt.x();
+            const int y2 = pt.y() + ipt.y();
+            if( x2>=0 && y2>=0 && x2<int(_xw) && y2<int(_yw) )
+              {
+                const int newbin = bins_image(x2, y2);
+                const double delta = fabs(v - smoothed_image(x2, y2));
+                if(delta < bestdelta && newbin >= 0 && newbin != thebin->bin_no())
+                  {
+                    bestbin = newbin;
+                    bestdelta = delta;
+                  }
+              }
+          }
+
+      if(bestbin >= 0)
+        {
+          thebin->remove_point(pt.x(), pt.y());
+          _bins[bestbin].add_point(pt.x(), pt.y());
+        }
+      else
+        {
+          cerr << "\nERROR: Could not force dissolve bin "
+               << thebin->bin_no() << '\n';
+          return;
+        }
+    }
+}
+
 void scrubber::dissolve_bin( bin* thebin )
 {
   // loop until no pixels remaining
@@ -104,14 +150,12 @@ void scrubber::dissolve_bin( bin* thebin )
       if( bestx == -1 && _helper.constrain_fill() )
 	find_best_neighbour( thebin, true, &bestx, &besty, &bestbin );
 
-      // stop dissolving bin if we have no neigbours for our remaining
-      // pixels
+      // if we can't find neighbouring bins, then find a nearest one
       if( bestbin == -1 )
 	{
-	  const long binno = thebin->bin_no();
-	  cout << "WARNING: Could not dissolve bin "
-	       << binno << " into surroundings\n";
-	  _cannot_dissolve[ binno ] = true;
+	  cout << "\nWARNING: Could not dissolve bin "
+	       << thebin->bin_no() << " into surroundings - forcing\n";
+          force_dissolve(thebin);
 	  return;
 	}
 

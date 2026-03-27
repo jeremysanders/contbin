@@ -20,6 +20,7 @@ public:
 
 private:
   void dissolve_bin( bin* diss_bin );
+  void force_dissolve( bin* diss_bin );
   void find_best_neighbour(bin* thebin, bool allow_unconstrained,
 			   int* bestx, int* besty, int* bestbin);
 

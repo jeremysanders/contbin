@@ -1,8 +1,8 @@
 Contour binning and accumulative smoothing software
-  version 1.6
+  version 1.7
 ------------------------------------------------------------------------------
 
-Copyright Jeremy Sanders <jeremy@jeremysanders.net> (2002-2016)
+Copyright Jeremy Sanders <jeremy@jeremysanders.net> (2002-2026)
 The reference paper is Sanders (2006), MNRAS, 371, 829,
 http://adsabs.harvard.edu/abs/2006MNRAS.371..829S
 
@@ -16,6 +16,8 @@ Changes:
  1.4: 2010-12-07: Fixes to compile on new gcc versions
  1.5: Compilation fixes
  1.6: Warnings for invalid image sizes and invalid S/N ratios
+ 1.7: Scrubbing now forces bins which cannot be normally scrubbed to be their
+      nearest bin with the most similar smoothed pixel value
 
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
